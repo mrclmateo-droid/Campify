@@ -1,0 +1,14 @@
+{
+  "name": "Cancionero — Songbook para músicos",
+  "short_name": "Cancionero",
+  "description": "Visor y editor de letras con acordes, autoscroll por BPM, tracklists y modo escenario para ensayos y shows en vivo.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101114",
+  "theme_color": "#101114",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
