@@ -289,11 +289,17 @@ nav#tabbar .brand{display:none;}
   position:absolute; bottom:0; left:0; right:0; z-index:3; background:var(--bg);
   padding: 10px 12px calc(14px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:10px;
   transition:opacity .2s ease, transform .2s ease;
+  max-height:78vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
 }
 .present-bottombar.chrome-hidden{opacity:0; pointer-events:none; transform:translateY(8px);}
 .transport{display:flex; align-items:center; justify-content:center; gap:10px;}
 .transport .btn.icon{width:52px; height:52px; border-radius:50%;}
 .transport .btn.play{width:64px; height:64px; border-radius:50%;}
+.capo-control{gap:10px;}
+.capo-label{font-size:13px; font-weight:600; color:var(--text-dim); margin-right:2px;}
+.capo-arrow{width:40px; height:40px; border-radius:50%;}
+.capo-arrow svg{width:20px; height:20px;}
+#pCapo{font-size:14px; font-weight:700; min-width:76px; text-align:center;}
 .transport .btn.play svg{width:26px;height:26px;}
 .sub-controls{display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;}
 .speed-seg{align-self:center;}
@@ -544,10 +550,15 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <span class="chip accent" id="pBpm">— BPM</span>
       <button class="btn small" id="btnBpmUp">BPM +</button>
     </div>
-    <div class="sub-controls">
-      <button class="btn small" id="btnCapoDown">Capo −</button>
-      <span class="chip" id="pCapo">Sin capo</span>
-      <button class="btn small" id="btnCapoUp">Capo +</button>
+    <div class="sub-controls capo-control">
+      <span class="capo-label">Capo</span>
+      <button class="btn icon capo-arrow" id="btnCapoDown" title="Bajar capo" aria-label="Bajar capo">
+        <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <span class="chip accent" id="pCapo">Sin capo</span>
+      <button class="btn icon capo-arrow" id="btnCapoUp" title="Subir capo" aria-label="Subir capo">
+        <svg viewBox="0 0 24 24"><path d="M18 15l-6-6-6 6"/></svg>
+      </button>
     </div>
     <div class="seg speed-seg" id="segSpeed">
       <button data-speed="slow">Lento</button>
