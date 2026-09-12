@@ -97,6 +97,8 @@ nav#tabbar button svg{width:22px; height:22px; stroke:currentColor; fill:none; s
 nav#tabbar button.active{color:var(--accent);}
 nav#tabbar button.active svg{stroke:var(--accent);}
 nav#tabbar .brand{display:none;}
+.mobile-header{display:flex; align-items:center; gap:9px; padding:16px 16px 2px; font-weight:650; font-size:15px; color:var(--text);}
+.mobile-header img{width:24px; height:24px; border-radius:7px; object-fit:cover; flex:none;}
 
 @media (min-width:880px){
   #app{flex-direction:row;}
@@ -111,6 +113,7 @@ nav#tabbar .brand{display:none;}
   }
   nav#tabbar button.active{background:var(--bg-elev-2);}
   #main{padding:28px 32px 60px; max-width:900px;}
+  .mobile-header{display:none;}
 }
 
 /* ============================================================
@@ -344,6 +347,10 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
   </nav>
 
   <main id="main">
+    <div class="mobile-header">
+      <img src="icon-180.png" alt="">
+      <span>CRO-Chords</span>
+    </div>
     <!-- ============ LIBRARY ============ -->
     <section id="view-library" class="view">
       <div class="view-header">
