@@ -96,6 +96,7 @@ nav#tabbar button{
 nav#tabbar button svg{width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:1.6;}
 nav#tabbar button.active{color:var(--accent);}
 nav#tabbar button.active svg{stroke:var(--accent);}
+nav#tabbar .brand{display:none;}
 
 @media (min-width:880px){
   #app{flex-direction:row;}
@@ -103,8 +104,8 @@ nav#tabbar button.active svg{stroke:var(--accent);}
     position:sticky; top:0; left:0; height:100vh; width:220px; flex-direction:column;
     border-top:0; border-right:1px solid var(--border); padding:22px 12px; gap:4px;
   }
-  nav#tabbar .brand{padding:6px 10px 22px; font-weight:600; font-size:15px; color:var(--text); display:flex; align-items:center; gap:8px;}
-  nav#tabbar .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);}
+  nav#tabbar .brand{padding:6px 10px 22px; font-weight:600; font-size:15px; color:var(--text); display:flex; align-items:center; gap:9px;}
+  nav#tabbar .brand img{width:24px; height:24px; border-radius:7px; object-fit:cover; flex:none;}
   nav#tabbar button{
     flex-direction:row; justify-content:flex-start; gap:12px; padding:11px 12px; font-size:13.5px; border-radius:var(--radius);
   }
@@ -319,7 +320,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
 <div id="app">
 
   <nav id="tabbar" aria-label="Navegación principal">
-    <div class="brand"><span class="dot"></span> CRO-Chords</div>
+    <div class="brand"><img src="icon-180.png" alt=""> CRO-Chords</div>
     <button data-view="library" class="tab-btn">
       <svg viewBox="0 0 24 24"><path d="M4 19.5V6a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v13.5M6 4v16M20 19.5H6"/></svg>
       <span>Canciones</span>
