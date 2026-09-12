@@ -181,6 +181,12 @@ nav#tabbar .brand{display:none;}
 }
 .empty .big{font-size:15px; color:var(--text); margin-bottom:6px; font-weight:600;}
 
+/* ---- chord diagram glossary ---- */
+.chord-diagram-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(80px,1fr)); gap:14px; margin:12px 0;}
+.chord-diagram-item{display:flex; flex-direction:column; align-items:center; gap:4px;}
+.chord-diagram-name{font-size:12.5px; font-weight:700; color:var(--text);}
+.chord-diagram-missing{font-size:10px; color:var(--text-faint); text-align:center; width:72px; height:90px; display:flex; align-items:center; justify-content:center; border:1px dashed var(--border); border-radius:6px;}
+
 /* ---- chord chart (measure grid) ---- */
 .chartfont{font-family:'Comic Neue', cursive; font-weight:700;}
 .chart-section{margin-bottom:18px;}
@@ -211,7 +217,7 @@ nav#tabbar .brand{display:none;}
   padding:16px; cursor:pointer; display:flex; flex-direction:column; gap:10px; min-height:var(--tap);
 }
 .song-card:hover{border-color:var(--text-faint);}
-.song-card .title{font-size:16px; font-weight:650; line-height:1.25; padding-right:30px;}
+.song-card .title{font-size:16px; font-weight:650; line-height:1.25; padding-right:64px;}
 .song-card .artist{font-size:13px; color:var(--text-dim);}
 .song-card .meta{display:flex; gap:8px; margin-top:auto;}
 .song-card-edit{
@@ -220,6 +226,12 @@ nav#tabbar .brand{display:none;}
 }
 .song-card-edit:hover{background:var(--bg-elev-2); color:var(--text);}
 .song-card-edit svg{width:17px; height:17px; stroke:currentColor; fill:none; stroke-width:1.7;}
+.song-card-delete{
+  position:absolute; top:10px; right:44px; width:34px; height:34px; border-radius:9px; border:0; background:transparent;
+  color:var(--text-faint); display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.song-card-delete:hover{background:var(--bg-elev-2); color:var(--danger);}
+.song-card-delete svg{width:17px; height:17px; stroke:currentColor; fill:none; stroke-width:1.7;}
 .chip{font-size:11.5px; padding:4px 9px; border-radius:999px; background:var(--bg-elev-2); color:var(--text-dim); border:1px solid var(--border-soft);}
 .chip.accent{color:var(--accent); border-color:transparent; background:color-mix(in srgb, var(--accent) 16%, transparent);}
 
@@ -262,7 +274,7 @@ nav#tabbar .brand{display:none;}
 .picker-row .a{font-size:12px; color:var(--text-dim);}
 
 /* ---- modal / sheet ---- */
-.overlay{position:fixed; inset:0; background:var(--scrim); z-index:80; display:flex; align-items:flex-end; justify-content:center;}
+.overlay{position:fixed; inset:0; background:var(--scrim); z-index:150; display:flex; align-items:flex-end; justify-content:center;}
 @media(min-width:640px){.overlay{align-items:center;}}
 .sheet{
   background:var(--bg-elev); border:1px solid var(--border); width:100%; max-width:520px; max-height:88vh; overflow-y:auto;
@@ -499,6 +511,8 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <button class="btn" id="btnEdNew"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Nueva</button>
         <button class="btn primary" id="btnEdSave"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg> Guardar</button>
         <button class="btn" id="btnEdDuplicate"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Duplicar</button>
+        <button class="btn" id="btnReharmonize" title="Crea una copia con séptimas diatónicas según la tonalidad"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg> Reharmonizar</button>
+        <button class="btn" id="btnShowChords" title="Ver diagramas de los acordes de esta canción"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M3 10h18"/></svg> Ver acordes</button>
         <button class="btn danger" id="btnEdDelete"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg> Eliminar</button>
         <button class="btn ghost" id="btnEdCancel">Cancelar edición</button>
       </div>
@@ -666,6 +680,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
     <div class="sub-controls">
       <button class="btn small" id="btnRestartScroll">Reiniciar scroll</button>
       <button class="btn small" id="btnToggleChordsPresent">Ocultar acordes</button>
+      <button class="btn small" id="btnShowChordsPresent">Ver acordes</button>
     </div>
   </div>
 </div>
@@ -702,7 +717,13 @@ const NOTE_INDEX = {};
 NOTES_SHARP.forEach((n,i)=>NOTE_INDEX[n]=i);
 NOTES_FLAT.forEach((n,i)=>NOTE_INDEX[n]=i);
 
-const CHORD_TOKEN_RE = /^([A-G])([#b]?)((?:maj|min|dim|aug|sus|add|m|M)?)(\d{0,2})(\/([A-G])([#b]?))?$/;
+// The suffix after root+accidental is intentionally permissive (any mix of
+// quality words, digits, and alterations, in any order) rather than a single
+// fixed "one quality word + digits" shape. Real chord notation chains these
+// freely — "7add13", "m7b5", "9sus4", "7#9" — and a stricter grammar would
+// silently reject valid chords instead of just passing their suffix through
+// unexamined the way transposition needs to anyway.
+const CHORD_TOKEN_RE = /^([A-G])([#b]?)((?:maj|min|dim|aug|sus|add|m|M|[#b]|\d)*)(\/([A-G])([#b]?))?$/;
 
 function isChordToken(tok){ return CHORD_TOKEN_RE.test(tok); }
 
@@ -726,9 +747,9 @@ function transposeToken(tok, semitones){
   if(semitones === 0) return tok;
   const m = tok.match(CHORD_TOKEN_RE);
   if(!m) return tok;
-  const [, letter, acc, quality, digits, , bassLetter, bassAcc] = m;
+  const [, letter, acc, suffix, , bassLetter, bassAcc] = m;
   const preferFlat = acc === 'b';
-  let out = transposeRoot(letter, acc, semitones, preferFlat) + quality + digits;
+  let out = transposeRoot(letter, acc, semitones, preferFlat) + suffix;
   if(bassLetter){
     out += '/' + transposeRoot(bassLetter, bassAcc || '', semitones, (bassAcc||'') === 'b');
   }
@@ -741,12 +762,14 @@ function transposeChordLine(line, semitones){
 }
 
 /* ---- key detection ---- */
-// Classify a parsed chord's quality into 'maj' | 'min' | 'dim' for matching
-// against a key's diatonic chords. sus/add/aug/plain chords are treated as
-// major-ish since they don't carry a strong major/minor color on their own.
-function qualityBucket(quality){
-  if(quality === 'm' || quality === 'min') return 'min';
-  if(quality === 'dim') return 'dim';
+// Classify a parsed chord's suffix into 'maj' | 'min' | 'dim' for matching
+// against a key's diatonic chords. Looks at the start of the suffix rather
+// than requiring an exact match, so extended/altered chords ("m7b5", "min9")
+// still classify correctly. sus/add/aug/plain/dominant-7 suffixes are
+// treated as major-ish since they don't carry a strong minor color alone.
+function qualityBucket(suffix){
+  if(suffix.includes('dim')) return 'dim';
+  if(/^m(?!aj)/.test(suffix)) return 'min';
   return 'maj';
 }
 // Diatonic triads for a key, expressed as [semitone offset from tonic, expected quality].
@@ -771,16 +794,30 @@ function extractChordsFromLyrics(lyrics){
   });
   return chords;
 }
-// Guesses a musical key from the chords used in a lyrics+chords block.
-// Heuristic: score every one of the 24 major/minor keys by how many of the
-// song's chords are diatonic to it (weighted by frequency), with a bonus for
-// keys whose tonic matches the song's first/last/most-frequent chord — those
-// are the strongest, simplest signals a short chord chart gives us. This is
-// a best-effort guess, not music-theory-perfect (e.g. it won't catch modal
-// or heavily-borrowed-chord songs), so it's offered as a suggestion the
+function extractChordsFromChart(chart){
+  const chords = [];
+  ((chart && chart.sections) || []).forEach(section=>{
+    (section.measures||[]).forEach(measure=>{
+      const tok = (measure.text||'').trim();
+      if(!tok || isMeasureSpecial(tok)) return;
+      const m = tok.match(CHORD_TOKEN_RE);
+      if(!m) return;
+      const idx = NOTE_INDEX[m[1]+m[2]];
+      if(idx === undefined) return;
+      chords.push({root:idx, quality:qualityBucket(m[3])});
+    });
+  });
+  return chords;
+}
+// Guesses a musical key from a list of {root, quality} chords. Heuristic:
+// score every one of the 24 major/minor keys by how many of the song's
+// chords are diatonic to it (weighted by frequency), with a bonus for keys
+// whose tonic matches the song's first/last/most-frequent chord — those are
+// the strongest, simplest signals a short chord chart gives us. This is a
+// best-effort guess, not music-theory-perfect (e.g. it won't catch modal or
+// heavily-borrowed-chord songs), so it's offered as a suggestion the
 // musician can override rather than applied silently.
-function detectKey(lyrics){
-  const chords = extractChordsFromLyrics(lyrics);
+function detectKeyFromChords(chords){
   if(!chords.length) return null;
 
   const freq = new Map(); // key: "root:quality" -> count
@@ -816,6 +853,167 @@ function detectKey(lyrics){
   const preferFlat = false; // default to sharps for the detected label; user can retype with flats if preferred
   const label = (preferFlat ? NOTES_FLAT : NOTES_SHARP)[best.tonic] + (best.isMinor ? 'm' : '');
   return label;
+}
+function detectKey(lyrics){
+  return detectKeyFromChords(extractChordsFromLyrics(lyrics));
+}
+function parseKeyLabel(label){
+  const m = (label||'').trim().match(/^([A-G])([#b]?)(m?)$/);
+  if(!m) return null;
+  const idx = NOTE_INDEX[m[1]+m[2]];
+  if(idx === undefined) return null;
+  return { tonic: idx, isMinor: m[3]==='m' };
+}
+
+/* ---- reharmonization: diatonic 7th extensions, function-aware ---- */
+// [semitone offset from tonic, expected bare-triad quality, extension to add].
+// The offset-7 minor-key entry is the natural/harmonic-minor V ambiguity —
+// resolved at apply-time from how the chord is actually written (m or not).
+function diatonicExtensionTable(isMinor){
+  return isMinor
+    ? [[0,'min','m7'],[2,'dim','m7b5'],[3,'maj','M7'],[5,'min','m7'],[7,'any','V7-OR-m7'],[8,'maj','M7'],[10,'maj','M7']]
+    : [[0,'maj','M7'],[2,'min','m7'],[4,'min','m7'],[5,'maj','M7'],[7,'maj','7'],[9,'min','m7'],[11,'dim','m7b5']];
+}
+// Only touches bare triads (just root + optional accidental + optional lone
+// "m") — anything that already carries a 7th, sus, add, alteration, etc. is
+// left exactly as written, and so is anything that doesn't diatonically fit
+// the given key (borrowed/chromatic chords keep their original color).
+function reharmonizeToken(tok, tonic, isMinor){
+  const m = tok.match(CHORD_TOKEN_RE);
+  if(!m) return tok;
+  const [, letter, acc, suffix, , bassLetter, bassAcc] = m;
+  if(!/^[mM]?$/.test(suffix)) return tok;
+  const rootIdx = NOTE_INDEX[letter+acc];
+  if(rootIdx === undefined) return tok;
+  const offset = (rootIdx - tonic + 12) % 12;
+  const entry = diatonicExtensionTable(isMinor).find(e=>e[0]===offset);
+  if(!entry) return tok;
+  const chordIsMinor = suffix.toLowerCase() === 'm';
+  const chordQuality = chordIsMinor ? 'min' : 'maj';
+  if(entry[1] !== 'any' && entry[1] !== chordQuality) return tok;
+  const ext = entry[2] === 'V7-OR-m7' ? (chordIsMinor ? 'm7' : '7') : entry[2];
+  let out = letter + acc + ext;
+  if(bassLetter) out += '/' + bassLetter + (bassAcc||'');
+  return out;
+}
+function reharmonizeLyricsText(lyrics, tonic, isMinor){
+  return (lyrics||'').split('\n').map(line=>{
+    if(!isChordLine(line)) return line;
+    return line.replace(/\S+/g, tok => reharmonizeToken(tok, tonic, isMinor));
+  }).join('\n');
+}
+function reharmonizeChart(chart, tonic, isMinor){
+  const clone = JSON.parse(JSON.stringify(chart||{sections:[]}));
+  (clone.sections||[]).forEach(section=>{
+    (section.measures||[]).forEach(measure=>{
+      if(measure.text && !isMeasureSpecial(measure.text)){
+        measure.text = reharmonizeToken(measure.text.trim(), tonic, isMinor);
+      }
+    });
+  });
+  return clone;
+}
+
+/* ---- chord diagrams: two movable barre shapes, transposed by root ----
+   Covers the 5 most common chord qualities (maj, min, 7, maj7, m7) across
+   all 12 roots. Anything outside that set (sus, dim, add9, altered
+   extensions, etc.) intentionally shows "no hay diagrama" rather than a
+   guessed voicing — those are real fingering choices a player makes, not
+   something safe to compute automatically. */
+const CHORD_SHAPES = {
+  E: { root:'E', maj:[0,2,2,1,0,0], min:[0,2,2,0,0,0], '7':[0,2,0,1,0,0], M7:[0,2,1,1,0,0], m7:[0,2,0,0,0,0] },
+  A: { root:'A', maj:['x',0,2,2,2,0], min:['x',0,2,2,1,0], '7':['x',0,2,0,2,0], M7:['x',0,2,1,2,0], m7:['x',0,2,0,1,0] }
+};
+const CHORD_SUFFIX_TO_QUALITY = { '':'maj', 'M':'maj', 'm':'min', '7':'7', 'M7':'M7', 'maj7':'M7', 'm7':'m7', 'min7':'m7' };
+
+function bestChordShape(rootLetter, rootAcc, quality){
+  const rootIdx = NOTE_INDEX[rootLetter+rootAcc];
+  const candidates = ['E','A'].map(fam=>{
+    const refIdx = NOTE_INDEX[CHORD_SHAPES[fam].root];
+    const barreFret = (rootIdx - refIdx + 12) % 12;
+    return { barreFret, offsets: CHORD_SHAPES[fam][quality] };
+  });
+  candidates.sort((a,b)=> a.barreFret - b.barreFret);
+  return candidates[0];
+}
+// Returns an SVG diagram string, or null if this chord's suffix isn't one of
+// the 5 supported qualities.
+function chordDiagramSvg(tok){
+  const m = tok.trim().match(CHORD_TOKEN_RE);
+  if(!m) return null;
+  const [, letter, acc, suffix] = m;
+  const quality = CHORD_SUFFIX_TO_QUALITY[suffix];
+  if(!quality) return null;
+  const { barreFret, offsets } = bestChordShape(letter, acc, quality);
+  const stringX = [10,22,34,46,58,70];
+  const nutY = 20, fretH = 16, numFrets = 4;
+  let svg = `<svg viewBox="0 0 80 100" width="72" height="90">`;
+  stringX.forEach(x=> svg += `<line x1="${x}" y1="${nutY}" x2="${x}" y2="${nutY+numFrets*fretH}" stroke="var(--text-faint)" stroke-width="1"/>`);
+  for(let f=0; f<=numFrets; f++){
+    const y = nutY + f*fretH;
+    const thick = (f===0 && barreFret===0);
+    svg += `<line x1="${stringX[0]}" y1="${y}" x2="${stringX[5]}" y2="${y}" stroke="var(--text-dim)" stroke-width="${thick?3:1}"/>`;
+  }
+  if(barreFret > 0){
+    svg += `<text x="2" y="${nutY+fretH*0.7}" font-size="9" fill="var(--text-dim)">${barreFret}fr</text>`;
+    const nonMuted = offsets.map((o,i)=>({o,i})).filter(d=>d.o!=='x');
+    const firstX = stringX[nonMuted[0].i], lastX = stringX[nonMuted[nonMuted.length-1].i];
+    const barreY = nutY + 0.5*fretH;
+    svg += `<line x1="${firstX}" y1="${barreY}" x2="${lastX}" y2="${barreY}" stroke="var(--accent)" stroke-width="7" stroke-linecap="round"/>`;
+  }
+  offsets.forEach((o, i)=>{
+    const x = stringX[i];
+    if(o === 'x'){
+      svg += `<text x="${x-3}" y="${nutY-6}" font-size="10" fill="var(--text-dim)">×</text>`;
+    } else if(barreFret === 0 && o === 0){
+      svg += `<circle cx="${x}" cy="${nutY-8}" r="3.5" fill="none" stroke="var(--text-dim)" stroke-width="1.3"/>`;
+    } else if(o > 0){
+      const y = nutY + (o-0.5)*fretH;
+      svg += `<circle cx="${x}" cy="${y}" r="5" fill="var(--accent)"/>`;
+    }
+  });
+  svg += `</svg>`;
+  return svg;
+}
+function uniqueChordTokensOfSong(song){
+  const seen = new Set();
+  const tokens = [];
+  function add(tok){
+    const t = (tok||'').trim();
+    if(!t || seen.has(t)) return;
+    if(!isChordToken(t)) return;
+    seen.add(t);
+    tokens.push(t);
+  }
+  (song.lyrics||'').split('\n').forEach(line=>{
+    if(isChordLine(line)) (line.match(/\S+/g)||[]).forEach(add);
+  });
+  ((song.chordChart && song.chordChart.sections) || []).forEach(section=>{
+    (section.measures||[]).forEach(m=>{ if(!isMeasureSpecial(m.text)) add(m.text); });
+  });
+  return tokens;
+}
+function chordGlossaryHtml(song){
+  const tokens = uniqueChordTokensOfSong(song);
+  if(!tokens.length) return '<div class="hint">Esta canción todavía no tiene acordes.</div>';
+  const items = tokens.map(tok=>{
+    const svg = chordDiagramSvg(tok);
+    return `<div class="chord-diagram-item">
+      <div class="chord-diagram-name">${escapeHtml(tok)}</div>
+      ${svg ? svg : '<div class="chord-diagram-missing">Sin<br>diagrama</div>'}
+    </div>`;
+  }).join('');
+  return `<div class="chord-diagram-grid">${items}</div>`;
+}
+function openChordGlossary(song){
+  openSheetHtml(`
+    <h2>Acordes de "${escapeHtml(song.title)}"</h2>
+    <div class="hint" style="margin:-4px 0 12px;">Formas de guitarra movibles. Los acordes con extensiones o alteraciones poco comunes no tienen diagrama disponible.</div>
+    ${chordGlossaryHtml(song)}
+    <div class="sheet-actions">
+      <button class="btn primary" id="sheetOk" style="flex:1;">Cerrar</button>
+    </div>`);
+  document.getElementById('sheetOk').addEventListener('click', closeSheet);
 }
 
 /* ============================================================
@@ -1056,13 +1254,61 @@ function toast(msg){
   if(!el){
     el = document.createElement('div');
     el.id = 'toastEl';
-    el.style.cssText = 'position:fixed;left:50%;bottom:calc(var(--nav-h) + 16px);transform:translateX(-50%);background:var(--bg-elev-3);color:var(--text);padding:10px 16px;border-radius:999px;font-size:13px;z-index:200;box-shadow:var(--shadow);border:1px solid var(--border);max-width:88vw;text-align:center;';
+    el.style.cssText = 'position:fixed;left:50%;bottom:calc(var(--nav-h) + 16px);transform:translateX(-50%);background:var(--bg-elev-3);color:var(--text);padding:10px 16px;border-radius:999px;font-size:13px;z-index:200;box-shadow:var(--shadow);border:1px solid var(--border);max-width:88vw;text-align:center;pointer-events:none;';
     document.body.appendChild(el);
   }
   el.textContent = msg;
   el.style.opacity = '1';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>{ el.style.opacity='0'; }, 2400);
+}
+
+let undoTimer = null;
+function toastUndo(message, onUndo){
+  if(undoTimer) clearTimeout(undoTimer);
+  let el = document.getElementById('undoToastEl');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'undoToastEl';
+    el.style.cssText = 'position:fixed;left:50%;bottom:calc(var(--nav-h) + 16px);transform:translateX(-50%);background:var(--bg-elev-3);color:var(--text);padding:8px 8px 8px 16px;border-radius:999px;font-size:13px;z-index:200;box-shadow:var(--shadow);border:1px solid var(--border);max-width:92vw;display:none;align-items:center;gap:10px;';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span>${escapeHtml(message)}</span><button id="undoBtn" style="background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;flex:none;">Deshacer</button>`;
+  el.style.display = 'flex';
+  el.style.opacity = '1';
+  document.getElementById('undoBtn').addEventListener('click', ()=>{
+    clearTimeout(undoTimer);
+    el.style.display = 'none';
+    onUndo();
+  }, {once:true});
+  undoTimer = setTimeout(()=>{ el.style.display = 'none'; }, 6000);
+}
+
+// Shared by the library card's trash icon and the Editor's "Eliminar" button
+// so both get the same undo safety net.
+function deleteSongWithUndo(id){
+  const idx = state.songs.findIndex(s=>s.id===id);
+  if(idx===-1) return;
+  const removedSong = state.songs[idx];
+  state.songs.splice(idx,1);
+  const tracklistRemovals = [];
+  state.tracklists.forEach(tl=>{
+    const pos = tl.songIds.indexOf(id);
+    if(pos!==-1){ tracklistRemovals.push({tlId: tl.id, pos}); tl.songIds.splice(pos,1); }
+  });
+  if(ui.editingSongId === id) newSong();
+  saveState();
+  renderLibrary();
+  toastUndo('Canción eliminada', ()=>{
+    state.songs.splice(idx,0,removedSong);
+    tracklistRemovals.forEach(r=>{
+      const tl = state.tracklists.find(t=>t.id===r.tlId);
+      if(tl) tl.songIds.splice(r.pos,0,id);
+    });
+    saveState();
+    renderLibrary();
+    toast('Canción restaurada');
+  });
 }
 
 /* ============================================================
@@ -1138,6 +1384,9 @@ function renderLibrary(){
   }
   grid.innerHTML = list.map(s=>`
     <div class="song-card" data-id="${s.id}" tabindex="0" role="button">
+      <button class="song-card-delete" data-delete-id="${s.id}" title="Eliminar" aria-label="Eliminar ${escapeHtml(s.title)}">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>
+      </button>
       <button class="song-card-edit" data-edit-id="${s.id}" title="Editar" aria-label="Editar ${escapeHtml(s.title)}">
         <svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       </button>
@@ -1165,6 +1414,16 @@ function renderLibrary(){
       e.stopPropagation(); // don't also trigger the card's "open presentation" click
       loadSongIntoEditor(btn.dataset.editId);
       switchView('editor');
+    });
+  });
+  grid.querySelectorAll('.song-card-delete').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const id = btn.dataset.deleteId;
+      const song = state.songs.find(s=>s.id===id);
+      confirmSheet('Eliminar canción', `¿Eliminar "${song ? song.title : 'esta canción'}"? También se quitará de todos los tracklists.`, ()=>{
+        deleteSongWithUndo(id);
+      });
     });
   });
 }
@@ -1426,6 +1685,7 @@ function updateEditorButtons(){
   const editing = !!ui.editingSongId;
   document.getElementById('btnEdDuplicate').disabled = !editing;
   document.getElementById('btnEdDelete').disabled = !editing;
+  document.getElementById('btnReharmonize').disabled = !editing;
 }
 
 function readEditorForm(){
@@ -1446,6 +1706,14 @@ document.getElementById('btnDetectKey').addEventListener('click', ()=>{
   if(!guess){ toast('Agrega acordes a la letra primero'); return; }
   document.getElementById('fKey').value = guess;
   toast('Tonalidad detectada: ' + guess + ' (revísala, es una estimación)');
+});
+document.getElementById('btnShowChords').addEventListener('click', ()=>{
+  const tempSong = {
+    title: document.getElementById('fTitle').value.trim() || 'Sin título',
+    lyrics: document.getElementById('fLyrics').value,
+    chordChart: parseChartText(document.getElementById('fChartText').value)
+  };
+  openChordGlossary(tempSong);
 });
 
 
@@ -1480,16 +1748,38 @@ document.getElementById('btnEdDuplicate').addEventListener('click', ()=>{
   renderLibrary();
   toast('Canción duplicada');
 });
+document.getElementById('btnReharmonize').addEventListener('click', ()=>{
+  const s = state.songs.find(x=>x.id===ui.editingSongId);
+  if(!s) return;
+  let keyInfo = parseKeyLabel(s.key);
+  let detectedLabel = null;
+  if(!keyInfo){
+    const chords = extractChordsFromLyrics(s.lyrics).concat(extractChordsFromChart(s.chordChart));
+    detectedLabel = detectKeyFromChords(chords);
+    keyInfo = parseKeyLabel(detectedLabel);
+  }
+  if(!keyInfo){
+    toast('No se pudo determinar la tonalidad. Escribe una en "Tonalidad" o agrega acordes primero.');
+    return;
+  }
+  const copy = Object.assign({}, s, {
+    id: uid(),
+    title: s.title + ' (reharmonizada)',
+    updatedAt: todayISO(),
+    key: s.key || detectedLabel,
+    lyrics: reharmonizeLyricsText(s.lyrics, keyInfo.tonic, keyInfo.isMinor),
+    chordChart: reharmonizeChart(s.chordChart, keyInfo.tonic, keyInfo.isMinor)
+  });
+  state.songs.push(copy);
+  saveState();
+  loadSongIntoEditor(copy.id);
+  renderLibrary();
+  toast('Versión reharmonizada creada — revísala antes de usarla en vivo');
+});
 document.getElementById('btnEdDelete').addEventListener('click', ()=>{
   if(!ui.editingSongId) return;
   confirmSheet('Eliminar canción', '¿Seguro que quieres eliminar esta canción? También se quitará de todos los tracklists.', ()=>{
-    const id = ui.editingSongId;
-    state.songs = state.songs.filter(s=>s.id!==id);
-    state.tracklists.forEach(tl=> tl.songIds = tl.songIds.filter(sid=>sid!==id));
-    saveState();
-    newSong();
-    renderLibrary();
-    toast('Canción eliminada');
+    deleteSongWithUndo(ui.editingSongId);
   });
 });
 
@@ -1980,8 +2270,18 @@ document.getElementById('btnToggleChordsPresent').addEventListener('click', ()=>
   state.settings.showChords = !state.settings.showChords;
   applyShowChords(); saveState();
 });
+document.getElementById('btnShowChordsPresent').addEventListener('click', ()=>{
+  const s = currentPresentSong();
+  if(s) openChordGlossary(s);
+});
 
-document.getElementById('btnExitPresent').addEventListener('click', closePresent);
+document.getElementById('btnExitPresent').addEventListener('click', ()=>{
+  if(ui.player.playing){
+    confirmSheet('Salir de Presentación', 'La canción se está reproduciendo. ¿Seguro que quieres salir?', closePresent, 'Salir');
+  } else {
+    closePresent();
+  }
+});
 function closePresent(){
   closePresentSilently();
   switchView('library');
@@ -2246,7 +2546,7 @@ document.addEventListener('visibilitychange', ()=>{
    ============================================================ */
 // Loosely matches a chord token, also accepting unicode sharp/flat symbols
 // that some chord-chart generators use instead of plain # / b.
-const PDF_CHORD_RE = /^[A-G](#|b|\u266f|\u266d)?(maj|min|dim|aug|sus|add|m|M)?\d{0,2}(\/[A-G](#|b|\u266f|\u266d)?)?$/;
+const PDF_CHORD_RE = /^[A-G](#|b|\u266f|\u266d)?(?:maj|min|dim|aug|sus|add|m|M|#|b|\u266f|\u266d|\d)*(\/[A-G](#|b|\u266f|\u266d)?)?$/;
 function pdfNormalizeChordText(s){ return s.replace(/\u266d/g,'b').replace(/\u266f/g,'#'); }
 function pdfIsChordTok(t){ return PDF_CHORD_RE.test(t); }
 function pdfIsChordRow(toks){ return toks.length>0 && toks.every(pdfIsChordTok); }
