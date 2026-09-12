@@ -610,6 +610,16 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
 
       <div class="settings-group">
         <div class="settings-row">
+          <div>
+            <div class="label">Actualizar la app</div>
+            <div class="desc" id="updateStatus">Busca si hay una versión nueva publicada</div>
+          </div>
+          <button class="btn small" id="btnCheckUpdate">Buscar</button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-row">
           <div><div class="label">Exportar biblioteca</div><div class="desc">Descarga canciones y tracklists en JSON</div></div>
           <button class="btn small" id="btnExport">Exportar</button>
         </div>
@@ -2046,6 +2056,67 @@ document.getElementById('chkShowChords').addEventListener('change', e=>{ state.s
 document.getElementById('chkMetronome').addEventListener('change', e=>{ state.settings.metronome = e.target.checked; saveState(); setupMetronome(); });
 document.getElementById('chkWakeLock').addEventListener('change', e=>{ state.settings.wakeLock = e.target.checked; saveState(); if(!e.target.checked) releaseWakeLock(); else if(!document.getElementById('present').classList.contains('hidden')) requestWakeLock(); });
 
+/* ---- app updates (user-controlled, never mid-song) ---- */
+let swRegistration = null;
+let updateIsReady = false;
+
+function showUpdateReady(){
+  updateIsReady = true;
+  const status = document.getElementById('updateStatus');
+  const btn = document.getElementById('btnCheckUpdate');
+  if(status) status.textContent = 'Hay una versión nueva lista para instalar';
+  if(btn) btn.textContent = 'Actualizar';
+  toastUndo('Nueva versión disponible', ()=>{});
+  const undoBtn = document.getElementById('undoBtn');
+  if(undoBtn){
+    undoBtn.textContent = 'Actualizar';
+    undoBtn.addEventListener('click', applyUpdate, {once:true});
+  }
+}
+
+function applyUpdate(){
+  // Snapshot the library first: the reload itself doesn't touch localStorage,
+  // but a backup costs nothing and makes an update fully reversible.
+  try{
+    localStorage.setItem(STORAGE_KEY + '.backup', JSON.stringify({songs:state.songs, tracklists:state.tracklists, savedAt: todayISO()}));
+  }catch(e){ /* backup is best-effort; not worth blocking the update */ }
+  if(swRegistration && swRegistration.waiting){
+    swRegistration.waiting.postMessage({type:'SKIP_WAITING'});
+  } else {
+    location.reload();
+  }
+}
+
+document.getElementById('btnCheckUpdate').addEventListener('click', async ()=>{
+  const status = document.getElementById('updateStatus');
+  const btn = document.getElementById('btnCheckUpdate');
+
+  if(updateIsReady){ applyUpdate(); return; }
+
+  if(!('serviceWorker' in navigator) || !location.protocol.startsWith('http')){
+    status.textContent = 'Las actualizaciones solo funcionan con la app publicada (https)';
+    return;
+  }
+  btn.disabled = true;
+  status.textContent = 'Buscando…';
+  try{
+    if(!swRegistration) swRegistration = await navigator.serviceWorker.getRegistration();
+    if(!swRegistration){ status.textContent = 'No se pudo comprobar. Recarga la página e intenta de nuevo.'; btn.disabled = false; return; }
+    await swRegistration.update();
+    // Give the browser a moment to install a newly-found worker before reporting.
+    setTimeout(()=>{
+      btn.disabled = false;
+      if(!updateIsReady){
+        status.textContent = 'Ya tienes la última versión · ' + new Date().toLocaleTimeString();
+      }
+    }, 2500);
+  }catch(err){
+    console.error('Error al buscar actualizaciones', err);
+    status.textContent = 'No se pudo comprobar (¿sin conexión?)';
+    btn.disabled = false;
+  }
+});
+
 document.getElementById('btnExport').addEventListener('click', ()=>{
   const data = JSON.stringify({songs:state.songs, tracklists:state.tracklists}, null, 2);
   const blob = new Blob([data], {type:'application/json'});
@@ -2093,6 +2164,7 @@ document.getElementById('fileImport').addEventListener('change', e=>{
 document.getElementById('btnWipe').addEventListener('click', ()=>{
   confirmSheet('Borrar todos los datos', 'Se eliminarán todas las canciones, tracklists y preferencias guardadas en este dispositivo. Esta acción no se puede deshacer.', ()=>{
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY + '.backup');
     state = defaultState();
     applyTheme(); applyFontSize();
     renderLibrary(); renderTracklistsList(); renderSettings();
@@ -2834,7 +2906,31 @@ function init(){
   switchView('library');
 
   if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-    navigator.serviceWorker.register('service-worker.js').catch(()=>{ /* offline support unavailable, safe to ignore */ });
+    navigator.serviceWorker.register('service-worker.js')
+      .then(reg=>{
+        swRegistration = reg;
+        if(reg.waiting) showUpdateReady();
+        reg.addEventListener('updatefound', ()=>{
+          const incoming = reg.installing;
+          if(!incoming) return;
+          incoming.addEventListener('statechange', ()=>{
+            // "installed" with an existing controller means a NEW version is
+            // ready and waiting — a first-ever install has no controller yet.
+            if(incoming.state === 'installed' && navigator.serviceWorker.controller){
+              showUpdateReady();
+            }
+          });
+        });
+      })
+      .catch(()=>{ /* offline support unavailable, safe to ignore */ });
+
+    // Reload once the new worker actually takes control.
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(reloading) return;
+      reloading = true;
+      location.reload();
+    });
   }
 }
 init();
