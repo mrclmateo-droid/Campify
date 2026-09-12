@@ -1,4 +1,4 @@
-const CACHE_NAME = 'crochords-cache-v4';
+const CACHE_NAME = 'crochords-cache-v5';
 const ASSETS = [
   './index.html',
   './manifest.json',
@@ -8,10 +8,11 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', event => {
+  // Note: no skipWaiting() here on purpose. A freshly installed worker stays
+  // in "waiting" until the page explicitly tells it to take over, so an
+  // update can never swap the app out from under a musician mid-song.
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
   );
 });
 
@@ -21,6 +22,13 @@ self.addEventListener('activate', event => {
       Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
+});
+
+// Lets the page trigger activation once the user has accepted the update.
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // True network-first: always try to fetch the latest file over the network
