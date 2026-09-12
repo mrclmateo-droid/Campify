@@ -436,11 +436,18 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <div class="field-row-3">
         <div class="field"><label for="fTitle">Título</label><input type="text" id="fTitle" placeholder="Nombre de la canción"></div>
         <div class="field"><label for="fArtist">Artista</label><input type="text" id="fArtist" placeholder="Artista o autor"></div>
-        <div class="field"><label for="fKey">Tonalidad</label><input type="text" id="fKey" placeholder="Am, C, G…"></div>
+        <div class="field">
+          <label for="fKey">Tonalidad</label>
+          <div class="row" style="gap:8px; flex-wrap:nowrap;">
+            <input type="text" id="fKey" placeholder="Am, C, G…" style="flex:1;">
+            <button type="button" class="btn small" id="btnDetectKey" title="Detectar tonalidad a partir de los acordes">Detectar</button>
+          </div>
+        </div>
       </div>
-      <div class="field-row">
+      <div class="field-row-3">
         <div class="field"><label for="fBpm">BPM</label><input type="number" id="fBpm" min="30" max="300" placeholder="96"></div>
-        <div class="field"><label for="fNotes">Notas (opcional)</label><input type="text" id="fNotes" placeholder="Capo 2, subir tono en el puente…"></div>
+        <div class="field"><label for="fCapo">Capo</label><input type="number" id="fCapo" min="0" max="11" placeholder="0"></div>
+        <div class="field"><label for="fNotes">Notas (opcional)</label><input type="text" id="fNotes" placeholder="Subir tono en el puente…"></div>
       </div>
       <div class="field">
         <label for="fLyrics">Letra y acordes</label>
@@ -537,6 +544,11 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <span class="chip accent" id="pBpm">— BPM</span>
       <button class="btn small" id="btnBpmUp">BPM +</button>
     </div>
+    <div class="sub-controls">
+      <button class="btn small" id="btnCapoDown">Capo −</button>
+      <span class="chip" id="pCapo">Sin capo</span>
+      <button class="btn small" id="btnCapoUp">Capo +</button>
+    </div>
     <div class="seg speed-seg" id="segSpeed">
       <button data-speed="slow">Lento</button>
       <button data-speed="medium" class="active">Medio</button>
@@ -621,6 +633,84 @@ function transposeChordLine(line, semitones){
   return line.replace(/\S+/g, tok => isChordToken(tok) ? transposeToken(tok, semitones) : tok);
 }
 
+/* ---- key detection ---- */
+// Classify a parsed chord's quality into 'maj' | 'min' | 'dim' for matching
+// against a key's diatonic chords. sus/add/aug/plain chords are treated as
+// major-ish since they don't carry a strong major/minor color on their own.
+function qualityBucket(quality){
+  if(quality === 'm' || quality === 'min') return 'min';
+  if(quality === 'dim') return 'dim';
+  return 'maj';
+}
+// Diatonic triads for a key, expressed as [semitone offset from tonic, expected quality].
+// 'any' means either maj or min is accepted at that degree (covers natural vs harmonic minor V).
+function diatonicDegrees(isMinor){
+  return isMinor
+    ? [[0,'min'],[2,'dim'],[3,'maj'],[5,'min'],[7,'any'],[8,'maj'],[10,'maj']]
+    : [[0,'maj'],[2,'min'],[4,'min'],[5,'maj'],[7,'maj'],[9,'min'],[11,'dim']];
+}
+function extractChordsFromLyrics(lyrics){
+  const lines = (lyrics||'').split('\n');
+  const chords = [];
+  lines.forEach(line=>{
+    if(!isChordLine(line)) return;
+    (line.match(/\S+/g)||[]).forEach(tok=>{
+      const m = tok.match(CHORD_TOKEN_RE);
+      if(!m) return;
+      const idx = NOTE_INDEX[m[1]+m[2]];
+      if(idx === undefined) return;
+      chords.push({root:idx, quality:qualityBucket(m[3])});
+    });
+  });
+  return chords;
+}
+// Guesses a musical key from the chords used in a lyrics+chords block.
+// Heuristic: score every one of the 24 major/minor keys by how many of the
+// song's chords are diatonic to it (weighted by frequency), with a bonus for
+// keys whose tonic matches the song's first/last/most-frequent chord — those
+// are the strongest, simplest signals a short chord chart gives us. This is
+// a best-effort guess, not music-theory-perfect (e.g. it won't catch modal
+// or heavily-borrowed-chord songs), so it's offered as a suggestion the
+// musician can override rather than applied silently.
+function detectKey(lyrics){
+  const chords = extractChordsFromLyrics(lyrics);
+  if(!chords.length) return null;
+
+  const freq = new Map(); // key: "root:quality" -> count
+  chords.forEach(c=>{
+    const k = c.root+':'+c.quality;
+    freq.set(k, (freq.get(k)||0)+1);
+  });
+  const firstChord = chords[0];
+  const lastChord = chords[chords.length-1];
+  let mostFrequentKey = null, mostFrequentCount = -1;
+  freq.forEach((count,k)=>{ if(count>mostFrequentCount){ mostFrequentCount=count; mostFrequentKey=k; } });
+
+  let best = null;
+  for(let tonic=0; tonic<12; tonic++){
+    for(const isMinor of [false,true]){
+      const degrees = diatonicDegrees(isMinor);
+      let score = 0;
+      freq.forEach((count,k)=>{
+        const [root,quality] = k.split(':');
+        const rootNum = Number(root);
+        const offset = (rootNum - tonic + 12) % 12;
+        const degree = degrees.find(d=>d[0]===offset);
+        if(degree && (degree[1]==='any' || degree[1]===quality)) score += count;
+      });
+      const tonicQuality = isMinor ? 'min' : 'maj';
+      if(firstChord.root===tonic && firstChord.quality===tonicQuality) score += 2;
+      if(lastChord.root===tonic && lastChord.quality===tonicQuality) score += 3;
+      if(mostFrequentKey === tonic+':'+tonicQuality) score += 2;
+      if(!best || score > best.score) best = {tonic, isMinor, score};
+    }
+  }
+  if(!best) return null;
+  const preferFlat = false; // default to sharps for the detected label; user can retype with flats if preferred
+  const label = (preferFlat ? NOTES_FLAT : NOTES_SHARP)[best.tonic] + (best.isMinor ? 'm' : '');
+  return label;
+}
+
 /* ============================================================
    SAMPLE DATA
    ============================================================ */
@@ -660,7 +750,7 @@ solo pide ser sincero
 No hay prisa en este viaje
            G            Am
 solo el eco de tu voz`,
-      updatedAt: todayISO(), transpose:0
+      updatedAt: todayISO(), transpose:0, capo:0
     },
     {
       id: uid(), title:'Camino de Sal', artist:'Ribera', bpm:128, key:'Em', notes:'Segunda estrofa con palm mute.',
@@ -692,7 +782,7 @@ Em       D        C          D
 Camino de sal, camino sin fin
 Em       D        C          D
 llevo tu nombre justo aquí`,
-      updatedAt: todayISO(), transpose:0
+      updatedAt: todayISO(), transpose:0, capo:0
     },
     {
       id: uid(), title:'Vuelo Bajo', artist:'Clara Noguera', bpm:72, key:'C', notes:'Balada. Piano o guitarra fingerpicking.',
@@ -723,7 +813,7 @@ C            G
 aprendiendo que el silencio
 Am              F
 también puede ser hogar`,
-      updatedAt: todayISO(), transpose:0
+      updatedAt: todayISO(), transpose:0, capo:0
     },
     {
       id: uid(), title:'Antes del Alba', artist:'Puente Norte', bpm:110, key:'G', notes:'Entrada solo bajo y voz.',
@@ -755,7 +845,7 @@ G           D          Em          C
 Antes del alba, antes del alba
 G           D          Em          C
 ya estamos caminando`,
-      updatedAt: todayISO(), transpose:0
+      updatedAt: todayISO(), transpose:0, capo:0
     },
     {
       id: uid(), title:'Última Estación', artist:'Los Andantes', bpm:84, key:'Dm', notes:'Cierre de show. Final ritardando.',
@@ -782,7 +872,7 @@ Dm            Bb
 pero esta noche, aquí
 C                  Dm
 fuimos exactamente lo que quisimos`,
-      updatedAt: todayISO(), transpose:0
+      updatedAt: todayISO(), transpose:0, capo:0
     }
   ];
 }
@@ -814,7 +904,7 @@ function loadState(){
     if(!parsed || !Array.isArray(parsed.songs)) return defaultState();
     parsed.settings = Object.assign(defaultState().settings, parsed.settings||{});
     parsed.tracklists = parsed.tracklists || [];
-    parsed.songs.forEach(s=>{ if(typeof s.transpose !== 'number') s.transpose = 0; });
+    parsed.songs.forEach(s=>{ if(typeof s.transpose !== 'number') s.transpose = 0; if(typeof s.capo !== 'number') s.capo = 0; });
     return parsed;
   }catch(e){
     console.error('No se pudo leer el almacenamiento local, usando datos de ejemplo.', e);
@@ -990,6 +1080,7 @@ function newSong(){
   document.getElementById('fArtist').value = '';
   document.getElementById('fKey').value = '';
   document.getElementById('fBpm').value = '';
+  document.getElementById('fCapo').value = '';
   document.getElementById('fNotes').value = '';
   document.getElementById('fLyrics').value = '';
   updateEditorButtons();
@@ -1006,6 +1097,7 @@ function loadSongIntoEditor(id){
   document.getElementById('fArtist').value = s.artist||'';
   document.getElementById('fKey').value = s.key||'';
   document.getElementById('fBpm').value = s.bpm||'';
+  document.getElementById('fCapo').value = s.capo||'';
   document.getElementById('fNotes').value = s.notes||'';
   document.getElementById('fLyrics').value = s.lyrics||'';
   updateEditorButtons();
@@ -1023,10 +1115,19 @@ function readEditorForm(){
     artist: document.getElementById('fArtist').value.trim(),
     key: document.getElementById('fKey').value.trim(),
     bpm: clamp(parseInt(document.getElementById('fBpm').value,10) || 90, 20, 400),
+    capo: clamp(parseInt(document.getElementById('fCapo').value,10) || 0, 0, 11),
     notes: document.getElementById('fNotes').value.trim(),
     lyrics: document.getElementById('fLyrics').value
   };
 }
+
+document.getElementById('btnDetectKey').addEventListener('click', ()=>{
+  const guess = detectKey(document.getElementById('fLyrics').value);
+  if(!guess){ toast('Agrega acordes a la letra primero'); return; }
+  document.getElementById('fKey').value = guess;
+  toast('Tonalidad detectada: ' + guess + ' (revísala, es una estimación)');
+});
+
 
 document.getElementById('btnEdSave').addEventListener('click', ()=>{
   const data = readEditorForm();
@@ -1355,6 +1456,7 @@ document.getElementById('fileImport').addEventListener('change', e=>{
         data.songs.forEach(s=>{
           if(!s.id || state.songs.some(x=>x.id===s.id)) s.id = uid();
           if(typeof s.transpose !== 'number') s.transpose = 0;
+          if(typeof s.capo !== 'number') s.capo = 0;
           state.songs.push(s); added++;
         });
       }
@@ -1434,6 +1536,7 @@ function loadPresentSong(){
   document.getElementById('pArtist').textContent = s.artist || '';
   document.getElementById('pBpm').textContent = (s.bpm||'—') + ' BPM';
   document.getElementById('pKey').textContent = s.key ? transposeChordLine(s.key, s.transpose||0) : '—';
+  document.getElementById('pCapo').textContent = s.capo ? ('Capo ' + s.capo) : 'Sin capo';
   renderLyrics(s);
   setScrollTop(0);
   pausePlayback();
@@ -1441,7 +1544,11 @@ function loadPresentSong(){
 }
 
 function renderLyrics(song){
-  const semitones = song.transpose || 0;
+  // Chords shown = the song's real key transposed by `transpose` semitones,
+  // then shifted DOWN by `capo` frets — that's what makes a capo work: the
+  // easier shapes you actually play, while the capo's pitch boost brings the
+  // sound back up to the same real key shown in the "Tonalidad" chip.
+  const semitones = (song.transpose || 0) - (song.capo || 0);
   const lines = (song.lyrics || '').split('\n');
   const html = lines.map(line=>{
     if(isChordLine(line)){
@@ -1508,6 +1615,17 @@ function shiftTranspose(delta){
   saveState();
   renderLyrics(s);
   document.getElementById('pKey').textContent = s.key ? transposeChordLine(s.key, s.transpose||0) : '—';
+}
+
+/* ---- capo: shows easier chord shapes while keeping the same real key ---- */
+document.getElementById('btnCapoUp').addEventListener('click', ()=>shiftCapo(1));
+document.getElementById('btnCapoDown').addEventListener('click', ()=>shiftCapo(-1));
+function shiftCapo(delta){
+  const s = currentPresentSong(); if(!s) return;
+  s.capo = clamp((s.capo||0) + delta, 0, 11);
+  saveState();
+  renderLyrics(s);
+  document.getElementById('pCapo').textContent = s.capo ? ('Capo ' + s.capo) : 'Sin capo';
 }
 
 /* ---- bpm adjust from performance view ---- */
