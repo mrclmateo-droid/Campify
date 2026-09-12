@@ -1394,6 +1394,7 @@ function openPresent(songId, tracklistId){
   presentEl.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   loadPresentSong();
+  setChromeVisible(false); // start clean: only the lyrics fill the screen, tap to reveal controls
   requestWakeLock();
   setupMetronome();
 }
