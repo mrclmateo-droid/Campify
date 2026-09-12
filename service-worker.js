@@ -1,8 +1,10 @@
-const CACHE_NAME = 'cancionero-cache-v2';
+const CACHE_NAME = 'crochords-cache-v4';
 const ASSETS = [
   './index.html',
   './manifest.json',
-  './icon.svg'
+  './icon-512.png',
+  './icon-180.png',
+  './favicon-32.png'
 ];
 
 self.addEventListener('install', event => {
