@@ -1718,7 +1718,8 @@ document.getElementById('btnStageMode').addEventListener('click', ()=>{
 /* ---- chrome show/hide + tap/double-tap/swipe gestures ---- */
 function setChromeVisible(visible){
   ui.chromeVisible = visible;
-  document.getElementById('presentTop').classList.toggle('chrome-hidden', !visible);
+  // The top bar (song title) stays fixed and always visible on purpose —
+  // only the bottom controls hide, so you always know what song is playing.
   document.getElementById('presentBottom').classList.toggle('chrome-hidden', !visible);
   document.getElementById('chromeToggleTab').classList.toggle('chrome-hidden-state', !visible);
 }
