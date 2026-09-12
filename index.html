@@ -341,8 +341,7 @@ nav#tabbar .brand{display:none;}
 .present-topbar.chrome-hidden{opacity:0; pointer-events:none; transform:translateY(-8px);}
 
 #lyricsViewport{position:absolute; inset:0; overflow-y:auto; padding:70px 22px 40vh; -webkit-overflow-scrolling:touch; touch-action:pan-y;}
-#lyricsContent{max-width:760px; margin:0 auto; font-family:var(--font-mono); white-space:pre; font-size:var(--lyrics-size); line-height:1.9;}
-#lyricsContent.wrap-lines{white-space:pre-wrap; word-break:break-word;}
+#lyricsContent{max-width:760px; margin:0 auto; font-family:var(--font-mono); white-space:pre-wrap; word-break:break-word; font-size:var(--lyrics-size); line-height:1.9;}
 .line{min-height:1em;}
 .line.chord-line{color:var(--accent); font-weight:700; letter-spacing:.01em;}
 .hide-chords .chord-line{display:none;}
@@ -587,10 +586,6 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           <div class="stepper">
             <button id="fontMinus">−</button><span class="val" id="fontVal">22</span><button id="fontPlus">+</button>
           </div>
-        </div>
-        <div class="settings-row">
-          <div><div class="label">Ajustar línea larga</div><div class="desc">Envuelve texto en vez de desbordar horizontalmente</div></div>
-          <label class="switch"><input type="checkbox" id="chkWrap"><span class="track"></span><span class="thumb"></span></label>
         </div>
       </div>
 
@@ -1201,7 +1196,7 @@ function defaultState(){
       { id: uid(), name:'Ensayo demo', songIds: songs.map(s=>s.id), updatedAt: todayISO() }
     ],
     settings: {
-      theme:'dark', fontSize:22, wrapLines:false, showChords:true, metronome:false, wakeLock:true,
+      theme:'dark', fontSize:22, showChords:true, metronome:false, wakeLock:true,
       scrollSpeed:'medium', lastSongId: songs[0].id, lastTracklistId: null
     }
   };
@@ -2027,7 +2022,6 @@ function applyFontSize(){
 function renderSettings(){
   document.querySelectorAll('#segTheme button').forEach(b=>b.classList.toggle('active', b.dataset.theme===state.settings.theme));
   document.getElementById('fontVal').textContent = state.settings.fontSize;
-  document.getElementById('chkWrap').checked = state.settings.wrapLines;
   document.getElementById('chkShowChords').checked = state.settings.showChords;
   document.getElementById('chkMetronome').checked = state.settings.metronome;
   document.getElementById('chkWakeLock').checked = state.settings.wakeLock;
@@ -2044,7 +2038,6 @@ document.getElementById('segTheme').addEventListener('click', e=>{
 });
 document.getElementById('fontMinus').addEventListener('click', ()=>{ state.settings.fontSize = clamp(state.settings.fontSize-2,14,44); applyFontSize(); saveState(); renderSettings(); });
 document.getElementById('fontPlus').addEventListener('click', ()=>{ state.settings.fontSize = clamp(state.settings.fontSize+2,14,44); applyFontSize(); saveState(); renderSettings(); });
-document.getElementById('chkWrap').addEventListener('change', e=>{ state.settings.wrapLines = e.target.checked; document.getElementById('lyricsContent').classList.toggle('wrap-lines', e.target.checked); saveState(); });
 document.getElementById('chkShowChords').addEventListener('change', e=>{ state.settings.showChords = e.target.checked; applyShowChords(); saveState(); });
 document.getElementById('chkMetronome').addEventListener('change', e=>{ state.settings.metronome = e.target.checked; saveState(); setupMetronome(); });
 document.getElementById('chkWakeLock').addEventListener('change', e=>{ state.settings.wakeLock = e.target.checked; saveState(); if(!e.target.checked) releaseWakeLock(); else if(!document.getElementById('present').classList.contains('hidden')) requestWakeLock(); });
@@ -2175,7 +2168,6 @@ function renderPresentContent(song){
   const semitones = (song.transpose || 0) - (song.capo || 0);
   if(ui.presentViewMode === 'chart'){
     lyricsContent.innerHTML = renderChordChartHtml(song.chordChart, semitones, false) || '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
-    lyricsContent.classList.remove('wrap-lines');
   } else {
     renderLyrics(song);
   }
@@ -2263,7 +2255,6 @@ function renderLyrics(song){
   const semitones = (song.transpose || 0) - (song.capo || 0);
   const html = chordHtmlForLyrics(song.lyrics, semitones);
   lyricsContent.innerHTML = html || '<div class="line lyric-line">(Esta canción no tiene letra todavía)</div>';
-  lyricsContent.classList.toggle('wrap-lines', state.settings.wrapLines);
   applyShowChords();
 }
 
