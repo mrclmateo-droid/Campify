@@ -536,7 +536,12 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <div class="hint" style="margin-top:8px;">Esto es solo una vista previa — el texto de arriba guarda los acordes originales tal cual los escribiste; el capo solo cambia lo que se muestra aquí y en Presentación.</div>
       </div>
       <div class="field">
-        <label for="fChartText">Tabla de acordes (opcional)</label>
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <label for="fChartText" style="margin:0;">Tabla de acordes (opcional)</label>
+          <button type="button" class="btn small" id="btnGenerateChart">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 5v14M5 12h14"/></svg> Generar desde la letra
+          </button>
+        </div>
         <textarea id="fChartText" spellcheck="false" style="min-height:140px; font-family:var(--font-mono); font-size:14px;" placeholder="[A]&#10;C | CM7 | C7 | F&#10;Fm6 | C | D7 | CM7(1)&#10;C(2)&#10;&#10;[B: Melo]&#10;Dm | G | C | %"></textarea>
         <div class="hint">Para formato tipo "real book": escribe cada sección entre corchetes — <strong>[A]</strong> o <strong>[B: Melo]</strong> — y los compases separados por "<strong>|</strong>". Usa <strong>N.C.</strong> para silencio y <strong>%</strong> para repetir el compás anterior. Para finales de repetición, agrega <strong>(1)</strong> o <strong>(2)</strong> pegado al acorde, ej. <strong>CM7(1)</strong>. Independiente del cuadro de letra de arriba — usa uno, el otro, o ambos.</div>
       </div>
@@ -1281,6 +1286,54 @@ function updateChartPreview(){
 }
 document.getElementById('fChartText').addEventListener('input', updateChartPreview);
 
+// Best-effort conversion: each token on a chord line becomes one measure.
+// The lyrics format has no explicit bar lines, so this is an approximation
+// meant to save typing, not a precise reconstruction — the user reviews and
+// adjusts the generated text same as with key detection.
+function generateChartFromLyrics(lyricsText){
+  const lines = (lyricsText||'').split('\n');
+  const sections = [];
+  let current = null;
+  function startSection(label){
+    current = { label: label || String.fromCharCode(65+sections.length), name:'', measures:[] };
+    sections.push(current);
+  }
+  lines.forEach(line=>{
+    const bracket = line.trim().match(/^\[(.+)\]$/);
+    if(bracket){
+      const voice = normalizeVoiceLabel(bracket[1]);
+      if(!voice){ // a real section marker like [Coro]/[Puente], not a [Voz 1] voice tag
+        const inner = bracket[1];
+        const colonIdx = inner.indexOf(':');
+        const label = (colonIdx>=0 ? inner.slice(0,colonIdx) : inner).trim();
+        startSection(label);
+      }
+      return;
+    }
+    if(isChordLine(line)){
+      const toks = line.match(/\S+/g) || [];
+      if(!toks.length) return;
+      if(!current) startSection(null);
+      toks.forEach(t=> current.measures.push({ text:t, ending:null }));
+    }
+  });
+  return { sections: sections.filter(s=>s.measures.length) };
+}
+document.getElementById('btnGenerateChart').addEventListener('click', ()=>{
+  const generated = generateChartFromLyrics(document.getElementById('fLyrics').value);
+  if(!generated.sections.length){ toast('No se encontraron acordes en la letra'); return; }
+  const applyIt = ()=>{
+    document.getElementById('fChartText').value = chartToText(generated);
+    updateChartPreview();
+    toast('Tabla generada — revísala, es una aproximación');
+  };
+  if(document.getElementById('fChartText').value.trim()){
+    confirmSheet('Reemplazar tabla', 'Ya tienes una tabla escrita. ¿Reemplazarla con la generada desde la letra?', applyIt, 'Reemplazar');
+  } else {
+    applyIt();
+  }
+});
+
 /* ---- voice assignment: line-by-line UI instead of manual bracket tags ---- */
 function parseLyricsIntoBlocks(lyricsText){
   const rawLines = (lyricsText||'').split('\n');
@@ -1450,13 +1503,13 @@ function openSheetHtml(html){
 }
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeSheet(); });
 
-function confirmSheet(title, msg, onConfirm){
+function confirmSheet(title, msg, onConfirm, confirmLabel){
   openSheetHtml(`
     <h2>${escapeHtml(title)}</h2>
     <p style="color:var(--text-dim); font-size:14px; line-height:1.5;">${escapeHtml(msg)}</p>
     <div class="sheet-actions">
       <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
-      <button class="btn danger" id="sheetConfirm" style="flex:1;">Eliminar</button>
+      <button class="btn danger" id="sheetConfirm" style="flex:1;">${escapeHtml(confirmLabel || 'Eliminar')}</button>
     </div>`);
   document.getElementById('sheetCancel').addEventListener('click', closeSheet);
   document.getElementById('sheetConfirm').addEventListener('click', ()=>{ closeSheet(); onConfirm(); });
