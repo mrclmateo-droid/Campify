@@ -2029,6 +2029,29 @@ function pdfNormalizeChordText(s){ return s.replace(/\u266d/g,'b').replace(/\u26
 function pdfIsChordTok(t){ return PDF_CHORD_RE.test(t); }
 function pdfIsChordRow(toks){ return toks.length>0 && toks.every(pdfIsChordTok); }
 function pdfMedian(arr){ const s=[...arr].sort((a,b)=>a-b); return s.length ? s[Math.floor(s.length/2)] : 7; }
+// Some chord-chart PDFs emit a chord's sharp/flat sign as its own separate
+// positioned text fragment (e.g. "C", "#", "m7" instead of one "C#m7" piece).
+// Re-glue those: a lone accidental symbol always merges with its neighbor
+// (it's never a meaningful word on its own), and any other fragments sitting
+// unusually close together (much closer than normal word spacing) get
+// merged too, since that tight a gap only happens within one broken-up chord.
+function pdfCoalesceRowWords(rowWords, avgCharW){
+  const sorted = [...rowWords].sort((a,b)=>a.x0-b.x0);
+  const merged = [];
+  sorted.forEach(w=>{
+    const isLoneAccidental = /^[#b\u266f\u266d]$/.test(w.text);
+    const prev = merged[merged.length-1];
+    const gap = prev ? (w.x0 - prev.x1) : Infinity;
+    const tightGap = gap < avgCharW*0.35;
+    if(prev && (isLoneAccidental || tightGap)){
+      prev.text += w.text;
+      prev.x1 = w.x1;
+    } else {
+      merged.push(Object.assign({}, w));
+    }
+  });
+  return merged;
+}
 
 // Core reconstruction: takes normalized word items per page (already converted
 // from PDF.js's bottom-up coordinate space into top-down "top" values) and
@@ -2070,6 +2093,7 @@ function pdfExtractChordChart(pages){
         rows.push({top:w.top, words:[w]});
       }
     });
+    rows.forEach(r=>{ r.words = pdfCoalesceRowWords(r.words, avgCharW); });
 
     const col = x => Math.round((x-minX)/avgCharW);
     const buildLine = rowWords => {
