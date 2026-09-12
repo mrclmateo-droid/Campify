@@ -380,6 +380,11 @@ nav#tabbar .brand{display:none;}
   position:fixed; top:calc(8px + env(safe-area-inset-top)); right:10px; z-index:110; background:var(--accent); color:var(--accent-ink);
   font-size:11px; font-weight:700; padding:5px 10px; border-radius:999px; letter-spacing:.02em;
 }
+#fontSizeIndicator{
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:120;
+  background:rgba(0,0,0,.72); color:#fff; font-size:22px; font-weight:700; padding:14px 22px;
+  border-radius:14px; pointer-events:none;
+}
 #chromeToggleTab{
   position:fixed; left:50%; bottom:0; transform:translateX(-50%);
   width:64px; height:22px; border:1px solid var(--border); border-bottom:0; border-radius:12px 12px 0 0;
@@ -646,6 +651,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
   </div>
 
   <div id="lyricsViewport"><div id="lyricsContent"></div></div>
+  <div id="fontSizeIndicator" class="hidden"></div>
 
   <div class="present-bottombar" id="presentBottom">
     <div class="sub-controls">
@@ -2435,8 +2441,21 @@ document.getElementById('chromeToggleTab').addEventListener('click', ()=> setChr
 
 (function setupGestures(){
   let touchStartX=0, touchStartY=0, touchStartT=0, horizontalIntent=false;
+  let pinchStartDist=0, pinchStartSize=0, pinchLiveSize=0, pinchActive=false, pinchHideTimer=null;
+
+  function touchDist(t0, t1){
+    return Math.hypot(t1.clientX-t0.clientX, t1.clientY-t0.clientY);
+  }
 
   lyricsViewport.addEventListener('touchstart', e=>{
+    if(e.touches.length===2){
+      pinchActive = true;
+      pinchStartDist = touchDist(e.touches[0], e.touches[1]);
+      pinchStartSize = state.settings.fontSize;
+      pinchLiveSize = pinchStartSize;
+      clearTimeout(pinchHideTimer);
+      return;
+    }
     if(e.touches.length!==1) return;
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
@@ -2445,6 +2464,17 @@ document.getElementById('chromeToggleTab').addEventListener('click', ()=> setChr
   }, {passive:true});
 
   lyricsViewport.addEventListener('touchmove', e=>{
+    if(pinchActive && e.touches.length===2){
+      e.preventDefault(); // don't let the browser's own page-zoom fight our font-size zoom
+      const dist = touchDist(e.touches[0], e.touches[1]);
+      const scale = dist / pinchStartDist;
+      pinchLiveSize = clamp(Math.round(pinchStartSize * scale), 14, 44);
+      document.documentElement.style.setProperty('--lyrics-size', pinchLiveSize + 'px');
+      const indicator = document.getElementById('fontSizeIndicator');
+      indicator.textContent = pinchLiveSize + ' px';
+      indicator.classList.remove('hidden');
+      return;
+    }
     if(e.touches.length!==1) return;
     const dx = e.touches[0].clientX - touchStartX;
     const dy = e.touches[0].clientY - touchStartY;
@@ -2455,6 +2485,16 @@ document.getElementById('chromeToggleTab').addEventListener('click', ()=> setChr
   }, {passive:false});
 
   lyricsViewport.addEventListener('touchend', e=>{
+    if(pinchActive){
+      if(e.touches.length < 2){
+        pinchActive = false;
+        state.settings.fontSize = pinchLiveSize;
+        saveState();
+        const indicator = document.getElementById('fontSizeIndicator');
+        pinchHideTimer = setTimeout(()=> indicator.classList.add('hidden'), 500);
+      }
+      return;
+    }
     const touch = e.changedTouches[0];
     const dx = touch.clientX - touchStartX;
     const dy = touch.clientY - touchStartY;
