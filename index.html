@@ -536,14 +536,13 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <div class="hint" style="margin-top:8px;">Esto es solo una vista previa — el texto de arriba guarda los acordes originales tal cual los escribiste; el capo solo cambia lo que se muestra aquí y en Presentación.</div>
       </div>
       <div class="field">
-        <div class="row" style="justify-content:space-between; margin-bottom:6px;">
-          <label style="margin:0;">Tabla de acordes (opcional)</label>
-        </div>
-        <div class="hint" style="margin-top:0; margin-bottom:10px;">Para formato tipo "real book": secciones con compases en grilla, en vez de letra. Independiente del cuadro de arriba — usa una, la otra, o ambas.</div>
-        <div id="chartEditor"></div>
-        <button type="button" class="btn small" id="btnAddSection" style="margin-top:8px;">
-          <svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 5v14M5 12h14"/></svg> Agregar sección
-        </button>
+        <label for="fChartText">Tabla de acordes (opcional)</label>
+        <textarea id="fChartText" spellcheck="false" style="min-height:140px; font-family:var(--font-mono); font-size:14px;" placeholder="[A]&#10;C | CM7 | C7 | F&#10;Fm6 | C | D7 | CM7(1)&#10;C(2)&#10;&#10;[B: Melo]&#10;Dm | G | C | %"></textarea>
+        <div class="hint">Para formato tipo "real book": escribe cada sección entre corchetes — <strong>[A]</strong> o <strong>[B: Melo]</strong> — y los compases separados por "<strong>|</strong>". Usa <strong>N.C.</strong> para silencio y <strong>%</strong> para repetir el compás anterior. Para finales de repetición, agrega <strong>(1)</strong> o <strong>(2)</strong> pegado al acorde, ej. <strong>CM7(1)</strong>. Independiente del cuadro de letra de arriba — usa uno, el otro, o ambos.</div>
+      </div>
+      <div class="field">
+        <label>Vista previa de la tabla</label>
+        <div id="chartPreview"></div>
       </div>
     </section>
 
@@ -698,7 +697,7 @@ const NOTE_INDEX = {};
 NOTES_SHARP.forEach((n,i)=>NOTE_INDEX[n]=i);
 NOTES_FLAT.forEach((n,i)=>NOTE_INDEX[n]=i);
 
-const CHORD_TOKEN_RE = /^([A-G])([#b]?)((?:maj|min|dim|aug|sus|add|m)?)(\d{0,2})(\/([A-G])([#b]?))?$/;
+const CHORD_TOKEN_RE = /^([A-G])([#b]?)((?:maj|min|dim|aug|sus|add|m|M)?)(\d{0,2})(\/([A-G])([#b]?))?$/;
 
 function isChordToken(tok){ return CHORD_TOKEN_RE.test(tok); }
 
@@ -1188,10 +1187,10 @@ function newSong(){
   document.getElementById('fCapo').value = '';
   document.getElementById('fNotes').value = '';
   document.getElementById('fLyrics').value = '';
-  editorChart = { sections: [] };
+  document.getElementById('fChartText').value = '';
   updateEditorButtons();
   updateEditorPreview();
-  renderChartEditor();
+  updateChartPreview();
   document.getElementById('fTitle').focus();
 }
 
@@ -1208,10 +1207,10 @@ function loadSongIntoEditor(id){
   document.getElementById('fCapo').value = s.capo||'';
   document.getElementById('fNotes').value = s.notes||'';
   document.getElementById('fLyrics').value = s.lyrics||'';
-  editorChart = JSON.parse(JSON.stringify(s.chordChart && Array.isArray(s.chordChart.sections) ? s.chordChart : {sections:[]}));
+  document.getElementById('fChartText').value = chartToText(s.chordChart && Array.isArray(s.chordChart.sections) ? s.chordChart : {sections:[]});
   updateEditorButtons();
   updateEditorPreview();
-  renderChartEditor();
+  updateChartPreview();
 }
 
 function updateEditorPreview(){
@@ -1222,107 +1221,65 @@ function updateEditorPreview(){
 }
 document.getElementById('fLyrics').addEventListener('input', updateEditorPreview);
 
-/* ---- chord chart editor interactions ---- */
-function renderChartEditor(){
-  document.getElementById('chartEditor').innerHTML = renderChordChartHtml(editorChart, 0, true);
-}
-function nextSectionLabel(){
-  const used = editorChart.sections.map(s=>s.label);
-  const letters = 'ABCDEFGHIJ';
-  for(const l of letters) if(!used.includes(l)) return l;
-  return '?';
-}
-document.getElementById('btnAddSection').addEventListener('click', ()=>{
-  editorChart.sections.push({ label: nextSectionLabel(), name:'', measures:[{text:''}] });
-  renderChartEditor();
-});
-document.getElementById('chartEditor').addEventListener('click', e=>{
-  const sectionEl = e.target.closest('[data-section-idx]');
-  if(!sectionEl) return;
-  const si = Number(sectionEl.dataset.sectionIdx);
-  const section = editorChart.sections[si];
-  if(!section) return;
-
-  if(e.target.closest('[data-add-measure]')){
-    section.measures.push({text:''});
-    renderChartEditor();
-    return;
-  }
-  if(e.target.closest('[data-delete-section]')){
-    confirmSheet('Eliminar sección', `¿Eliminar la sección "${section.label}"?`, ()=>{
-      editorChart.sections.splice(si,1);
-      renderChartEditor();
-    });
-    return;
-  }
-  const moveBtn = e.target.closest('[data-move-section]');
-  if(moveBtn){
-    const dir = Number(moveBtn.dataset.moveSection);
-    const target = si+dir;
-    if(target>=0 && target<editorChart.sections.length){
-      const tmp = editorChart.sections[si];
-      editorChart.sections[si] = editorChart.sections[target];
-      editorChart.sections[target] = tmp;
-      renderChartEditor();
+/* ---- chord chart: plain-text editor (mirrors the "Letra y acordes" pattern) ---- */
+// Section headers reuse the same [Label] / [Label: Name] bracket convention
+// as the voice tags, so a bare chord token is never mistaken for a header.
+function parseChartText(text){
+  const lines = (text||'').split('\n');
+  const sections = [];
+  let current = null;
+  lines.forEach(line=>{
+    const headerMatch = line.trim().match(/^\[(.+)\]$/);
+    if(headerMatch){
+      const inner = headerMatch[1];
+      const colonIdx = inner.indexOf(':');
+      const label = (colonIdx>=0 ? inner.slice(0,colonIdx) : inner).trim();
+      const name = colonIdx>=0 ? inner.slice(colonIdx+1).trim() : '';
+      current = { label: label || '?', name, measures: [] };
+      sections.push(current);
+      return;
     }
-    return;
-  }
-  if(e.target.closest('[data-rename-label]')){
-    promptSheet('Etiqueta de sección', 'A, B, Intro, Coro…', section.label, val=>{
-      section.label = val;
-      renderChartEditor();
+    if(!line.trim()) return;
+    if(!line.includes('|')){
+      // A bare line with no "|" and no brackets: treat as one single measure,
+      // so a one-chord section (rare) still works without forcing a "|".
+      if(!current){ current = {label:'A', name:'', measures:[]}; sections.push(current); }
+      current.measures.push(parseMeasureToken(line));
+      return;
+    }
+    if(!current){ current = {label:'A', name:'', measures:[]}; sections.push(current); }
+    line.split('|').forEach(seg=>{
+      const t = seg.trim();
+      if(t) current.measures.push(parseMeasureToken(t));
     });
-    return;
-  }
-  const cellEl = e.target.closest('[data-measure-idx]');
-  if(cellEl){
-    const mi = Number(cellEl.dataset.measureIdx);
-    openMeasureEditSheet(section, mi);
-  }
-});
-document.getElementById('chartEditor').addEventListener('input', e=>{
-  if(e.target.matches('[data-rename-section]')){
-    const sectionEl = e.target.closest('[data-section-idx]');
-    const si = Number(sectionEl.dataset.sectionIdx);
-    editorChart.sections[si].name = e.target.value;
-  }
-});
-function openMeasureEditSheet(section, mi){
-  const measure = section.measures[mi];
-  openSheetHtml(`
-    <h2>Compás ${mi+1}</h2>
-    <div class="field"><label>Acorde</label><input type="text" id="measureText" value="${escapeHtml(measure.text||'')}" placeholder="Dm7, CM7, N.C., %…"></div>
-    <div class="field">
-      <label>Final de repetición</label>
-      <div class="seg" id="measureEndingSeg">
-        <button type="button" data-e="" class="${!measure.ending?'active':''}">Ninguno</button>
-        <button type="button" data-e="1" class="${measure.ending==='1'?'active':''}">1.</button>
-        <button type="button" data-e="2" class="${measure.ending==='2'?'active':''}">2.</button>
-      </div>
-    </div>
-    <div class="sheet-actions">
-      <button class="btn danger" id="sheetDeleteMeasure" style="flex:1;">Eliminar compás</button>
-      <button class="btn primary" id="sheetOk" style="flex:1;">Guardar</button>
-    </div>`);
-  let pendingEnding = measure.ending || '';
-  document.getElementById('measureEndingSeg').addEventListener('click', e=>{
-    const btn = e.target.closest('button'); if(!btn) return;
-    pendingEnding = btn.dataset.e;
-    document.querySelectorAll('#measureEndingSeg button').forEach(b=>b.classList.toggle('active', b===btn));
   });
-  document.getElementById('sheetDeleteMeasure').addEventListener('click', ()=>{
-    section.measures.splice(mi,1);
-    closeSheet();
-    renderChartEditor();
-  });
-  document.getElementById('sheetOk').addEventListener('click', ()=>{
-    measure.text = document.getElementById('measureText').value;
-    measure.ending = pendingEnding || null;
-    closeSheet();
-    renderChartEditor();
-  });
-  setTimeout(()=>document.getElementById('measureText').focus(), 50);
+  return { sections };
 }
+function parseMeasureToken(tok){
+  const m = tok.trim().match(/^(.*?)\((1|2)\)$/);
+  if(m) return { text: m[1].trim(), ending: m[2] };
+  return { text: tok.trim(), ending: null };
+}
+function measureToToken(m){
+  return m.text + (m.ending ? '('+m.ending+')' : '');
+}
+function chartToText(chart){
+  const sections = (chart && chart.sections) || [];
+  return sections.map(s=>{
+    const header = '[' + s.label + (s.name ? ': '+s.name : '') + ']';
+    const rows = [];
+    for(let i=0;i<s.measures.length;i+=4){
+      rows.push(s.measures.slice(i,i+4).map(measureToToken).join(' | '));
+    }
+    return header + '\n' + rows.join('\n');
+  }).join('\n\n');
+}
+function updateChartPreview(){
+  editorChart = parseChartText(document.getElementById('fChartText').value);
+  document.getElementById('chartPreview').innerHTML =
+    renderChordChartHtml(editorChart, 0, false) || '<div class="hint">(Escribe una sección arriba para ver la vista previa)</div>';
+}
+document.getElementById('fChartText').addEventListener('input', updateChartPreview);
 
 /* ---- voice assignment: line-by-line UI instead of manual bracket tags ---- */
 function parseLyricsIntoBlocks(lyricsText){
@@ -1427,7 +1384,7 @@ function readEditorForm(){
     capo: clamp(parseInt(document.getElementById('fCapo').value,10) || 0, 0, 11),
     notes: document.getElementById('fNotes').value.trim(),
     lyrics: document.getElementById('fLyrics').value,
-    chordChart: JSON.parse(JSON.stringify(editorChart))
+    chordChart: parseChartText(document.getElementById('fChartText').value)
   };
 }
 
@@ -1925,41 +1882,28 @@ function transposeMeasureText(text, semitones){
   if(!t || isMeasureSpecial(t) || semitones === 0) return t;
   return t.replace(/\S+/g, tok => isChordToken(tok) ? transposeToken(tok, semitones) : tok);
 }
-function chartSectionHtml(section, semitones, editable){
-  const measuresHtml = (section.measures||[]).map((m,mi)=>{
-    const displayText = transposeMeasureText(m.text, semitones);
+function chartSectionHtml(section){
+  const measuresHtml = (section.measures||[]).map(m=>{
+    const displayText = transposeMeasureText(m.text, section.__semitones || 0);
     const special = isMeasureSpecial(m.text);
     const endingTag = m.ending ? `<span class="ending-tag">${escapeHtml(m.ending)}.</span>` : '';
     const cls = 'chart-cell chartfont' + (special ? ' muted' : '');
-    const attrs = editable ? ` data-measure-idx="${mi}"` : '';
-    return `<div class="${cls}"${attrs}>${endingTag}${escapeHtml(displayText || (editable ? '?' : ''))}</div>`;
+    return `<div class="${cls}">${endingTag}${escapeHtml(displayText)}</div>`;
   }).join('');
-  const addCell = editable ? `<div class="chart-cell add-cell" data-add-measure="1"><i>+</i></div>` : '';
-  const nameHtml = editable
-    ? `<input class="chart-name" data-rename-section="1" value="${escapeHtml(section.name||'')}" placeholder="Nombre (opcional)">`
-    : (section.name ? `<span class="chart-name">${escapeHtml(section.name)}</span>` : '');
-  const actionsHtml = editable ? `
-    <div class="chart-section-actions">
-      <button class="btn icon ghost" data-move-section="-1" title="Mover arriba" style="width:32px;height:32px;"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M18 15l-6-6-6 6"/></svg></button>
-      <button class="btn icon ghost" data-move-section="1" title="Mover abajo" style="width:32px;height:32px;"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M6 9l6 6 6-6"/></svg></button>
-      <button class="btn icon ghost" data-delete-section="1" title="Eliminar sección" style="width:32px;height:32px;"><svg viewBox="0 0 24 24" width="15" height="15" stroke="var(--danger)"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg></button>
-    </div>` : '';
+  const nameHtml = section.name ? `<span class="chart-name">${escapeHtml(section.name)}</span>` : '';
   return `
-    <div class="chart-section" data-section-idx="${section.__idx}">
+    <div class="chart-section">
       <div class="chart-section-head">
-        <button class="chart-badge" ${editable?'data-rename-label="1"':''}>${escapeHtml(section.label||'?')}</button>
+        <span class="chart-badge">${escapeHtml(section.label||'?')}</span>
         ${nameHtml}
-        ${actionsHtml}
       </div>
-      <div class="chart-grid">${measuresHtml}${addCell}</div>
+      <div class="chart-grid">${measuresHtml}</div>
     </div>`;
 }
-function renderChordChartHtml(chart, semitones, editable){
+function renderChordChartHtml(chart, semitones){
   const sections = (chart && chart.sections) || [];
-  if(!sections.length){
-    return editable ? '' : '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
-  }
-  return sections.map((s,i)=>{ s.__idx = i; return chartSectionHtml(s, semitones, editable); }).join('');
+  if(!sections.length) return '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
+  return sections.map(s=>{ s.__semitones = semitones; return chartSectionHtml(s); }).join('');
 }
 
 function renderLyrics(song){
@@ -2249,7 +2193,7 @@ document.addEventListener('visibilitychange', ()=>{
    ============================================================ */
 // Loosely matches a chord token, also accepting unicode sharp/flat symbols
 // that some chord-chart generators use instead of plain # / b.
-const PDF_CHORD_RE = /^[A-G](#|b|\u266f|\u266d)?(maj|min|dim|aug|sus|add|m)?\d{0,2}(\/[A-G](#|b|\u266f|\u266d)?)?$/;
+const PDF_CHORD_RE = /^[A-G](#|b|\u266f|\u266d)?(maj|min|dim|aug|sus|add|m|M)?\d{0,2}(\/[A-G](#|b|\u266f|\u266d)?)?$/;
 function pdfNormalizeChordText(s){ return s.replace(/\u266d/g,'b').replace(/\u266f/g,'#'); }
 function pdfIsChordTok(t){ return PDF_CHORD_RE.test(t); }
 function pdfIsChordRow(toks){ return toks.length>0 && toks.every(pdfIsChordTok); }
