@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#101114">
 <title>CRO-Chords — Songbook para músicos</title>
 <link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&display=swap" rel="stylesheet">
 <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="icon-180.png">
 <style>
@@ -177,6 +180,29 @@ nav#tabbar .brand{display:none;}
   text-align:center; padding:48px 20px; color:var(--text-dim); border:1px dashed var(--border); border-radius:var(--radius-lg);
 }
 .empty .big{font-size:15px; color:var(--text); margin-bottom:6px; font-weight:600;}
+
+/* ---- chord chart (measure grid) ---- */
+.chartfont{font-family:'Comic Neue', cursive; font-weight:700;}
+.chart-section{margin-bottom:18px;}
+.chart-section-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+.chart-badge{font-size:12px; font-weight:700; background:var(--accent); color:var(--accent-ink); border-radius:6px; padding:2px 9px; min-width:22px; text-align:center; cursor:pointer; border:0;}
+.chart-name{font-size:12px; color:var(--text-dim); background:none; border:0; flex:1; min-width:0;}
+.chart-section-actions{display:flex; gap:4px;}
+.chart-grid{display:grid; grid-template-columns:repeat(4,1fr); border-top:0.5px solid var(--border); border-left:0.5px solid var(--border);}
+.chart-cell{
+  border-right:0.5px solid var(--border); border-bottom:0.5px solid var(--border);
+  padding:14px 4px; font-size:22px; text-align:center; cursor:pointer; position:relative;
+  min-height:var(--tap); display:flex; align-items:center; justify-content:center; background:none; color:var(--accent);
+}
+.chart-cell.muted{color:var(--text-faint); font-size:17px;}
+.chart-cell.add-cell{color:var(--text-faint); font-size:20px; font-family:var(--font-ui); font-weight:400;}
+.chart-cell .ending-tag{
+  position:absolute; top:2px; left:4px; font-size:10px; font-weight:400; font-family:var(--font-ui); color:var(--text-dim);
+  border:0.5px solid var(--text-faint); border-bottom:0; border-radius:4px 4px 0 0; padding:0 5px; line-height:1.4;
+}
+.chart-toggle{display:flex; background:var(--bg-elev-2); border-radius:999px; padding:2px; gap:2px;}
+.chart-toggle button{border:0; background:none; padding:5px 12px; border-radius:999px; font-size:12px; color:var(--text-dim); cursor:pointer;}
+.chart-toggle button.active{background:var(--accent); color:var(--accent-ink);}
 
 /* ---- library cards ---- */
 .song-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:12px;}
@@ -509,6 +535,16 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <div id="editorPreview" class="editor-preview"></div>
         <div class="hint" style="margin-top:8px;">Esto es solo una vista previa — el texto de arriba guarda los acordes originales tal cual los escribiste; el capo solo cambia lo que se muestra aquí y en Presentación.</div>
       </div>
+      <div class="field">
+        <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+          <label style="margin:0;">Tabla de acordes (opcional)</label>
+        </div>
+        <div class="hint" style="margin-top:0; margin-bottom:10px;">Para formato tipo "real book": secciones con compases en grilla, en vez de letra. Independiente del cuadro de arriba — usa una, la otra, o ambas.</div>
+        <div id="chartEditor"></div>
+        <button type="button" class="btn small" id="btnAddSection" style="margin-top:8px;">
+          <svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 5v14M5 12h14"/></svg> Agregar sección
+        </button>
+      </div>
     </section>
 
     <!-- ============ SETTINGS ============ -->
@@ -581,6 +617,10 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
     <div class="song-info">
       <div class="t" id="pTitle">—</div>
       <div class="a" id="pArtist">—</div>
+    </div>
+    <div class="chart-toggle hidden" id="viewModeToggle">
+      <button type="button" data-view="lyrics" class="active">Letra</button>
+      <button type="button" data-view="chart">Tabla</button>
     </div>
     <div class="metro-dot" id="metroDot"></div>
     <button class="btn icon ghost" id="btnEditFromPresent" title="Editar esta canción"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
@@ -967,7 +1007,7 @@ function loadState(){
     if(!parsed || !Array.isArray(parsed.songs)) return defaultState();
     parsed.settings = Object.assign(defaultState().settings, parsed.settings||{});
     parsed.tracklists = parsed.tracklists || [];
-    parsed.songs.forEach(s=>{ if(typeof s.transpose !== 'number') s.transpose = 0; if(typeof s.capo !== 'number') s.capo = 0; });
+    parsed.songs.forEach(s=>{ if(typeof s.transpose !== 'number') s.transpose = 0; if(typeof s.capo !== 'number') s.capo = 0; if(!s.chordChart || !Array.isArray(s.chordChart.sections)) s.chordChart = {sections:[]}; });
     return parsed;
   }catch(e){
     console.error('No se pudo leer el almacenamiento local, usando datos de ejemplo.', e);
@@ -1135,6 +1175,8 @@ document.getElementById('btnNewFromLib').addEventListener('click', ()=>{ newSong
 /* ============================================================
    EDITOR VIEW
    ============================================================ */
+let editorChart = { sections: [] };
+
 function newSong(){
   ui.editingSongId = null;
   document.getElementById('editorTitle').textContent = 'Nueva canción';
@@ -1146,8 +1188,10 @@ function newSong(){
   document.getElementById('fCapo').value = '';
   document.getElementById('fNotes').value = '';
   document.getElementById('fLyrics').value = '';
+  editorChart = { sections: [] };
   updateEditorButtons();
   updateEditorPreview();
+  renderChartEditor();
   document.getElementById('fTitle').focus();
 }
 
@@ -1164,8 +1208,10 @@ function loadSongIntoEditor(id){
   document.getElementById('fCapo').value = s.capo||'';
   document.getElementById('fNotes').value = s.notes||'';
   document.getElementById('fLyrics').value = s.lyrics||'';
+  editorChart = JSON.parse(JSON.stringify(s.chordChart && Array.isArray(s.chordChart.sections) ? s.chordChart : {sections:[]}));
   updateEditorButtons();
   updateEditorPreview();
+  renderChartEditor();
 }
 
 function updateEditorPreview(){
@@ -1175,6 +1221,108 @@ function updateEditorPreview(){
   document.getElementById('editorPreview').innerHTML = html || '<div class="line lyric-line">(Escribe letra y acordes arriba para ver la vista previa)</div>';
 }
 document.getElementById('fLyrics').addEventListener('input', updateEditorPreview);
+
+/* ---- chord chart editor interactions ---- */
+function renderChartEditor(){
+  document.getElementById('chartEditor').innerHTML = renderChordChartHtml(editorChart, 0, true);
+}
+function nextSectionLabel(){
+  const used = editorChart.sections.map(s=>s.label);
+  const letters = 'ABCDEFGHIJ';
+  for(const l of letters) if(!used.includes(l)) return l;
+  return '?';
+}
+document.getElementById('btnAddSection').addEventListener('click', ()=>{
+  editorChart.sections.push({ label: nextSectionLabel(), name:'', measures:[{text:''}] });
+  renderChartEditor();
+});
+document.getElementById('chartEditor').addEventListener('click', e=>{
+  const sectionEl = e.target.closest('[data-section-idx]');
+  if(!sectionEl) return;
+  const si = Number(sectionEl.dataset.sectionIdx);
+  const section = editorChart.sections[si];
+  if(!section) return;
+
+  if(e.target.closest('[data-add-measure]')){
+    section.measures.push({text:''});
+    renderChartEditor();
+    return;
+  }
+  if(e.target.closest('[data-delete-section]')){
+    confirmSheet('Eliminar sección', `¿Eliminar la sección "${section.label}"?`, ()=>{
+      editorChart.sections.splice(si,1);
+      renderChartEditor();
+    });
+    return;
+  }
+  const moveBtn = e.target.closest('[data-move-section]');
+  if(moveBtn){
+    const dir = Number(moveBtn.dataset.moveSection);
+    const target = si+dir;
+    if(target>=0 && target<editorChart.sections.length){
+      const tmp = editorChart.sections[si];
+      editorChart.sections[si] = editorChart.sections[target];
+      editorChart.sections[target] = tmp;
+      renderChartEditor();
+    }
+    return;
+  }
+  if(e.target.closest('[data-rename-label]')){
+    promptSheet('Etiqueta de sección', 'A, B, Intro, Coro…', section.label, val=>{
+      section.label = val;
+      renderChartEditor();
+    });
+    return;
+  }
+  const cellEl = e.target.closest('[data-measure-idx]');
+  if(cellEl){
+    const mi = Number(cellEl.dataset.measureIdx);
+    openMeasureEditSheet(section, mi);
+  }
+});
+document.getElementById('chartEditor').addEventListener('input', e=>{
+  if(e.target.matches('[data-rename-section]')){
+    const sectionEl = e.target.closest('[data-section-idx]');
+    const si = Number(sectionEl.dataset.sectionIdx);
+    editorChart.sections[si].name = e.target.value;
+  }
+});
+function openMeasureEditSheet(section, mi){
+  const measure = section.measures[mi];
+  openSheetHtml(`
+    <h2>Compás ${mi+1}</h2>
+    <div class="field"><label>Acorde</label><input type="text" id="measureText" value="${escapeHtml(measure.text||'')}" placeholder="Dm7, CM7, N.C., %…"></div>
+    <div class="field">
+      <label>Final de repetición</label>
+      <div class="seg" id="measureEndingSeg">
+        <button type="button" data-e="" class="${!measure.ending?'active':''}">Ninguno</button>
+        <button type="button" data-e="1" class="${measure.ending==='1'?'active':''}">1.</button>
+        <button type="button" data-e="2" class="${measure.ending==='2'?'active':''}">2.</button>
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn danger" id="sheetDeleteMeasure" style="flex:1;">Eliminar compás</button>
+      <button class="btn primary" id="sheetOk" style="flex:1;">Guardar</button>
+    </div>`);
+  let pendingEnding = measure.ending || '';
+  document.getElementById('measureEndingSeg').addEventListener('click', e=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    pendingEnding = btn.dataset.e;
+    document.querySelectorAll('#measureEndingSeg button').forEach(b=>b.classList.toggle('active', b===btn));
+  });
+  document.getElementById('sheetDeleteMeasure').addEventListener('click', ()=>{
+    section.measures.splice(mi,1);
+    closeSheet();
+    renderChartEditor();
+  });
+  document.getElementById('sheetOk').addEventListener('click', ()=>{
+    measure.text = document.getElementById('measureText').value;
+    measure.ending = pendingEnding || null;
+    closeSheet();
+    renderChartEditor();
+  });
+  setTimeout(()=>document.getElementById('measureText').focus(), 50);
+}
 
 /* ---- voice assignment: line-by-line UI instead of manual bracket tags ---- */
 function parseLyricsIntoBlocks(lyricsText){
@@ -1278,7 +1426,8 @@ function readEditorForm(){
     bpm: clamp(parseInt(document.getElementById('fBpm').value,10) || 90, 20, 400),
     capo: clamp(parseInt(document.getElementById('fCapo').value,10) || 0, 0, 11),
     notes: document.getElementById('fNotes').value.trim(),
-    lyrics: document.getElementById('fLyrics').value
+    lyrics: document.getElementById('fLyrics').value,
+    chordChart: JSON.parse(JSON.stringify(editorChart))
   };
 }
 
@@ -1314,7 +1463,7 @@ document.getElementById('btnEdCancel').addEventListener('click', ()=>{
 document.getElementById('btnEdDuplicate').addEventListener('click', ()=>{
   if(!ui.editingSongId) return;
   const s = state.songs.find(x=>x.id===ui.editingSongId);
-  const copy = Object.assign({}, s, {id:uid(), title: s.title + ' (copia)', updatedAt: todayISO()});
+  const copy = Object.assign({}, s, {id:uid(), title: s.title + ' (copia)', updatedAt: todayISO(), chordChart: JSON.parse(JSON.stringify(s.chordChart||{sections:[]}))});
   state.songs.push(copy);
   saveState();
   loadSongIntoEditor(copy.id);
@@ -1618,6 +1767,7 @@ document.getElementById('fileImport').addEventListener('change', e=>{
           if(!s.id || state.songs.some(x=>x.id===s.id)) s.id = uid();
           if(typeof s.transpose !== 'number') s.transpose = 0;
           if(typeof s.capo !== 'number') s.capo = 0;
+          if(!s.chordChart || !Array.isArray(s.chordChart.sections)) s.chordChart = {sections:[]};
           state.songs.push(s); added++;
         });
       }
@@ -1698,11 +1848,39 @@ function loadPresentSong(){
   document.getElementById('pBpm').textContent = (s.bpm||'—') + ' BPM';
   document.getElementById('pKey').textContent = s.key ? transposeChordLine(s.key, s.transpose||0) : '—';
   document.getElementById('pCapo').textContent = s.capo ? ('Capo ' + s.capo) : 'Sin capo';
-  renderLyrics(s);
+
+  const hasLyrics = !!(s.lyrics && s.lyrics.trim());
+  const hasChart = !!(s.chordChart && s.chordChart.sections && s.chordChart.sections.length);
+  const toggle = document.getElementById('viewModeToggle');
+  if(hasLyrics && hasChart){
+    toggle.classList.remove('hidden');
+    ui.presentViewMode = 'lyrics';
+    toggle.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.view==='lyrics'));
+  } else {
+    toggle.classList.add('hidden');
+    ui.presentViewMode = hasChart ? 'chart' : 'lyrics';
+  }
+  renderPresentContent(s);
   setScrollTop(0);
   pausePlayback();
   setupMetronome();
 }
+function renderPresentContent(song){
+  const semitones = (song.transpose || 0) - (song.capo || 0);
+  if(ui.presentViewMode === 'chart'){
+    lyricsContent.innerHTML = renderChordChartHtml(song.chordChart, semitones, false) || '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
+    lyricsContent.classList.remove('wrap-lines');
+  } else {
+    renderLyrics(song);
+  }
+}
+document.getElementById('viewModeToggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  ui.presentViewMode = btn.dataset.view;
+  document.querySelectorAll('#viewModeToggle button').forEach(b=>b.classList.toggle('active', b===btn));
+  const s = currentPresentSong();
+  if(s){ renderPresentContent(s); setScrollTop(0); }
+});
 
 // Recognizes a line like "[Voz 1]", "[V2]", or "[Ambos]" as a marker that
 // switches which singer's color applies to the lyric lines that follow,
@@ -1735,6 +1913,53 @@ function chordHtmlForLyrics(lyrics, semitones){
     const voiceClass = currentVoice ? ' voice-'+currentVoice : '';
     return `<div class="line lyric-line${voiceClass}">${escapeHtml(line) || '&nbsp;'}</div>`;
   }).join('');
+}
+
+/* ---- chord chart (measure grid) rendering — shared by editor + presentation ---- */
+function isMeasureSpecial(text){
+  const t = (text||'').trim().toUpperCase();
+  return t === 'N.C.' || t === 'NC' || t === '%';
+}
+function transposeMeasureText(text, semitones){
+  const t = (text||'').trim();
+  if(!t || isMeasureSpecial(t) || semitones === 0) return t;
+  return t.replace(/\S+/g, tok => isChordToken(tok) ? transposeToken(tok, semitones) : tok);
+}
+function chartSectionHtml(section, semitones, editable){
+  const measuresHtml = (section.measures||[]).map((m,mi)=>{
+    const displayText = transposeMeasureText(m.text, semitones);
+    const special = isMeasureSpecial(m.text);
+    const endingTag = m.ending ? `<span class="ending-tag">${escapeHtml(m.ending)}.</span>` : '';
+    const cls = 'chart-cell chartfont' + (special ? ' muted' : '');
+    const attrs = editable ? ` data-measure-idx="${mi}"` : '';
+    return `<div class="${cls}"${attrs}>${endingTag}${escapeHtml(displayText || (editable ? '?' : ''))}</div>`;
+  }).join('');
+  const addCell = editable ? `<div class="chart-cell add-cell" data-add-measure="1"><i>+</i></div>` : '';
+  const nameHtml = editable
+    ? `<input class="chart-name" data-rename-section="1" value="${escapeHtml(section.name||'')}" placeholder="Nombre (opcional)">`
+    : (section.name ? `<span class="chart-name">${escapeHtml(section.name)}</span>` : '');
+  const actionsHtml = editable ? `
+    <div class="chart-section-actions">
+      <button class="btn icon ghost" data-move-section="-1" title="Mover arriba" style="width:32px;height:32px;"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M18 15l-6-6-6 6"/></svg></button>
+      <button class="btn icon ghost" data-move-section="1" title="Mover abajo" style="width:32px;height:32px;"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button class="btn icon ghost" data-delete-section="1" title="Eliminar sección" style="width:32px;height:32px;"><svg viewBox="0 0 24 24" width="15" height="15" stroke="var(--danger)"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg></button>
+    </div>` : '';
+  return `
+    <div class="chart-section" data-section-idx="${section.__idx}">
+      <div class="chart-section-head">
+        <button class="chart-badge" ${editable?'data-rename-label="1"':''}>${escapeHtml(section.label||'?')}</button>
+        ${nameHtml}
+        ${actionsHtml}
+      </div>
+      <div class="chart-grid">${measuresHtml}${addCell}</div>
+    </div>`;
+}
+function renderChordChartHtml(chart, semitones, editable){
+  const sections = (chart && chart.sections) || [];
+  if(!sections.length){
+    return editable ? '' : '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
+  }
+  return sections.map((s,i)=>{ s.__idx = i; return chartSectionHtml(s, semitones, editable); }).join('');
 }
 
 function renderLyrics(song){
@@ -1799,7 +2024,7 @@ function shiftTranspose(delta){
   const s = currentPresentSong(); if(!s) return;
   s.transpose = (s.transpose||0) + delta;
   saveState();
-  renderLyrics(s);
+  renderPresentContent(s);
   document.getElementById('pKey').textContent = s.key ? transposeChordLine(s.key, s.transpose||0) : '—';
 }
 
@@ -1810,7 +2035,7 @@ function shiftCapo(delta){
   const s = currentPresentSong(); if(!s) return;
   s.capo = clamp((s.capo||0) + delta, 0, 11);
   saveState();
-  renderLyrics(s);
+  renderPresentContent(s);
   document.getElementById('pCapo').textContent = s.capo ? ('Capo ' + s.capo) : 'Sin capo';
 }
 
