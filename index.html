@@ -644,6 +644,13 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           </div>
           <button class="btn small" id="btnCheckUpdate">Buscar</button>
         </div>
+        <div class="settings-row">
+          <div>
+            <div class="label">Forzar actualización</div>
+            <div class="desc">Si "Buscar" no encuentra una versión que sabés que existe (común en el ícono instalado)</div>
+          </div>
+          <button class="btn small danger" id="btnForceReset">Forzar</button>
+        </div>
       </div>
 
       <div class="settings-group">
@@ -2307,14 +2314,19 @@ document.getElementById('btnCheckUpdate').addEventListener('click', async ()=>{
   btn.disabled = true;
   status.textContent = 'Buscando…';
   try{
-    if(!swRegistration) swRegistration = await navigator.serviceWorker.getRegistration();
+    // Always fetch a FRESH registration rather than reusing a cached
+    // reference — on iOS, a standalone home-screen app can sit suspended
+    // in the background for a long time, and the JS reference grabbed at
+    // launch can go stale by the time the user actually taps "Buscar".
+    swRegistration = await navigator.serviceWorker.getRegistration();
     if(!swRegistration){ status.textContent = 'No se pudo comprobar. Recarga la página e intenta de nuevo.'; btn.disabled = false; return; }
     await swRegistration.update();
-    // Give the browser a moment to install a newly-found worker before reporting.
     setTimeout(()=>{
       btn.disabled = false;
       if(!updateIsReady){
-        status.textContent = 'Ya tienes la última versión · ' + new Date().toLocaleTimeString();
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+        status.innerHTML = 'Ya tienes la última versión · ' + new Date().toLocaleTimeString()
+          + (isStandalone ? '<br><span style="color:var(--text-faint);">¿Seguro que hay una versión nueva? Cierra del todo la app (deslizar hacia arriba en el selector) y volvé a abrirla antes de buscar de nuevo — en el ícono instalado, iOS a veces no revisa mientras estuvo en segundo plano.</span>' : '');
       }
     }, 2500);
   }catch(err){
@@ -2322,6 +2334,19 @@ document.getElementById('btnCheckUpdate').addEventListener('click', async ()=>{
     status.textContent = 'No se pudo comprobar (¿sin conexión?)';
     btn.disabled = false;
   }
+});
+document.getElementById('btnForceReset').addEventListener('click', ()=>{
+  confirmSheet('Forzar actualización', 'Esto borra la copia local de la app (no tus canciones) y la vuelve a descargar entera. Úsalo solo si "Buscar" no encuentra una versión que sabes que existe.', async ()=>{
+    try{
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+      if('caches' in window){
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k=>caches.delete(k)));
+      }
+    }catch(e){ console.error('Error forzando reset', e); }
+    location.reload(true);
+  }, 'Forzar');
 });
 
 document.getElementById('btnExport').addEventListener('click', ()=>{
