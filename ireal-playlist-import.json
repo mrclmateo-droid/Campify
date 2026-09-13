@@ -1,0 +1,2067 @@
+{
+  "songs": [
+    {
+      "id": "ireal-1789328958153-0",
+      "title": "Everybody Wants To Rule The World - Stax",
+      "artist": "Tears For Fears",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles).",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "A/D G/D",
+                "ending": null
+              },
+              {
+                "text": "G/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "V",
+            "name": "Verso",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "A/D G/D",
+                "ending": null
+              },
+              {
+                "text": "G/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "C",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "F#m",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "F#m",
+                "ending": null
+              },
+              {
+                "text": "Em F#m",
+                "ending": null
+              },
+              {
+                "text": "G A",
+                "ending": null
+              },
+              {
+                "text": "A/D G/D",
+                "ending": "1"
+              },
+              {
+                "text": "G/D",
+                "ending": "1"
+              }
+            ]
+          },
+          {
+            "label": "B",
+            "name": "",
+            "repeat": 3,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "D A",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958154-1",
+      "title": "Come Together",
+      "artist": "The Beatles (Lennon, McCartney)",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles). Coda; Contiene D.S./Coda/Segno — revisar manualmente el orden de repetición, no reconstruido automáticamente.; Segno",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "Intro",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Dm Dm7/F Dm7/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm Dm7/F Dm7/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A2",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A3",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Bm Bm/A",
+                "ending": null
+              },
+              {
+                "text": "G A7",
+                "ending": null
+              },
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": "1"
+              },
+              {
+                "text": "%",
+                "ending": "1"
+              },
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": "1"
+              },
+              {
+                "text": "%",
+                "ending": "1"
+              }
+            ]
+          },
+          {
+            "label": "Coda",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": "2"
+              },
+              {
+                "text": "%",
+                "ending": "2"
+              }
+            ]
+          },
+          {
+            "label": "C",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Dm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm Dm/F Dm/D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "Coda2",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Dm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958154-2",
+      "title": "Are You Gonna Go My Way",
+      "artist": "Lenny Kravitz",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles). Coda; Contiene D.S./Coda/Segno — revisar manualmente el orden de repetición, no reconstruido automáticamente.; Segno",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A2",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Gm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "V",
+            "name": "Verso",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "A/F#",
+                "ending": null
+              },
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "A/F#",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "Coda",
+            "name": "Intro",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "C",
+            "name": "Coda",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Em D",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              },
+              {
+                "text": "E D",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "I",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "D",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "A/F#",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "A/F#",
+                "ending": null
+              },
+              {
+                "text": "Em",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "A/F#",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958154-3",
+      "title": "You Know I'm No Good 1",
+      "artist": "Amy Winehouse",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles).",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Dm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Gm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A2",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Dm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Gm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Dm",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Gm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "F",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "C",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Dm",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Am",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Am",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958154-4",
+      "title": "Sweet Dreams (Gig)",
+      "artist": "Eurhytmics",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles). Coda; Contiene D.S./Coda/Segno — revisar manualmente el orden de repetición, no reconstruido automáticamente.",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "Ab G5",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "I",
+            "name": "Intro",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Ab Ab5/G G",
+                "ending": null
+              },
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "F",
+                "ending": null
+              },
+              {
+                "text": "Ab",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A2",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "Ab G5",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A3",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "Ab G5",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Ab",
+                "ending": null
+              },
+              {
+                "text": "Ab/G G",
+                "ending": null
+              },
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "F",
+                "ending": null
+              },
+              {
+                "text": "Ab",
+                "ending": null
+              },
+              {
+                "text": "Ab/G G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "I2",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A4",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B2",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Ab",
+                "ending": null
+              },
+              {
+                "text": "Ab/G G",
+                "ending": null
+              },
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "F",
+                "ending": null
+              },
+              {
+                "text": "Ab",
+                "ending": null
+              },
+              {
+                "text": "Ab/G G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "C",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "F/C",
+                "ending": null
+              },
+              {
+                "text": "Cm7",
+                "ending": null
+              },
+              {
+                "text": "F/C",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "D",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "Ab G5",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A5",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "Ab G5",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "V",
+            "name": "Verso",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Fm",
+                "ending": null
+              },
+              {
+                "text": "Fm G5",
+                "ending": null
+              },
+              {
+                "text": "Cm",
+                "ending": null
+              },
+              {
+                "text": "Fm",
+                "ending": null
+              },
+              {
+                "text": "Ab",
+                "ending": null
+              },
+              {
+                "text": "Ab G5",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "C2",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "D2",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "I3",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "I4",
+            "name": "Intro",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "I5",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A6",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "Coda",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958154-5",
+      "title": "Superstition (Gig)",
+      "artist": "Stevie Wonder",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles).",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Em7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A2",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Em7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "B C",
+                "ending": null
+              },
+              {
+                "text": "B Bb",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              },
+              {
+                "text": "B7",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "C",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Em7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958154-6",
+      "title": "Satisfaction (I Can't Get No)",
+      "artist": "Jagger-Richards",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles). Contiene D.S./Coda/Segno — revisar manualmente el orden de repetición, no reconstruido automáticamente.; Segno",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "D/A A",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A2",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "B",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "D/A A",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A3",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "E",
+                "ending": "1"
+              },
+              {
+                "text": "%",
+                "ending": "1"
+              },
+              {
+                "text": "A7",
+                "ending": "1"
+              },
+              {
+                "text": "%",
+                "ending": "1"
+              },
+              {
+                "text": "E",
+                "ending": "1"
+              },
+              {
+                "text": "B",
+                "ending": "1"
+              },
+              {
+                "text": "E",
+                "ending": "1"
+              },
+              {
+                "text": "A7",
+                "ending": "1"
+              },
+              {
+                "text": "E",
+                "ending": "1"
+              },
+              {
+                "text": "D/A A",
+                "ending": "1"
+              }
+            ]
+          },
+          {
+            "label": "B2",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958155-7",
+      "title": "Crazy Little Thing Called Love (Gig)",
+      "artist": "Queen",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles). Coda; Contiene D.S./Coda/Segno — revisar manualmente el orden de repetición, no reconstruido automáticamente.",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "Intro",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "D G/D D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A2",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G C G/B",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "C G/B",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "Bb C",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "G7",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "C",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "Bb",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E A",
+                "ending": null
+              },
+              {
+                "text": "F",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A3",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "C G/B",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "C G/B",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "Bb C",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B2",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Bb",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "Bb",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E A",
+                "ending": null
+              },
+              {
+                "text": "F",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "N.C.",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "A4",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "C G/B",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "C G/B",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "Bb C",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": "1"
+              },
+              {
+                "text": "Bb C",
+                "ending": "2"
+              },
+              {
+                "text": "D",
+                "ending": "2"
+              }
+            ]
+          },
+          {
+            "label": "Coda",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Bb C",
+                "ending": "2"
+              },
+              {
+                "text": "D",
+                "ending": "2"
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958155-8",
+      "title": "Proud Mary",
+      "artist": "Tina Turner",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles).",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "D",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              },
+              {
+                "text": "Bm",
+                "ending": null
+              },
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "D",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "Am D",
+                "ending": null
+              },
+              {
+                "text": "Am D",
+                "ending": null
+              },
+              {
+                "text": "C",
+                "ending": null
+              },
+              {
+                "text": "F Dm F",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958155-9",
+      "title": "Cosmic Girl",
+      "artist": "Jamiroquai",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles).",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "Em7",
+                "ending": null
+              },
+              {
+                "text": "F#m7 B7",
+                "ending": null
+              },
+              {
+                "text": "Em7",
+                "ending": null
+              },
+              {
+                "text": "F#m7 B7",
+                "ending": null
+              },
+              {
+                "text": "Abm7 F#m7",
+                "ending": null
+              },
+              {
+                "text": "B C#m7",
+                "ending": null
+              }
+            ]
+          },
+          {
+            "label": "B",
+            "name": "",
+            "repeat": 2,
+            "measures": [
+              {
+                "text": "B A",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              },
+              {
+                "text": "B A7",
+                "ending": null
+              },
+              {
+                "text": "A7",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    },
+    {
+      "id": "ireal-1789328958155-10",
+      "title": "Always On The Run",
+      "artist": "Lenny Kravitz",
+      "bpm": 100,
+      "key": "",
+      "notes": "Importado de iReal Pro (playlist San Rafael / The Beatles).",
+      "lyrics": "",
+      "chordChart": {
+        "sections": [
+          {
+            "label": "A",
+            "name": "",
+            "repeat": 0,
+            "measures": [
+              {
+                "text": "G",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "A",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "E",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "B",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              },
+              {
+                "text": "%",
+                "ending": null
+              }
+            ]
+          }
+        ]
+      },
+      "transpose": 0,
+      "capo": 0,
+      "updatedAt": "2026-09-13T19:49:18.000Z"
+    }
+  ],
+  "tracklists": []
+}

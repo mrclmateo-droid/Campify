@@ -192,8 +192,9 @@ nav#tabbar .brand{display:none;}
 #chartEditorScreen.hidden{display:none;}
 .chart-editor-bar{
   display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border);
-  padding-top:calc(10px + env(safe-area-inset-top)); flex:none;
+  padding-top:calc(10px + env(safe-area-inset-top)); flex:none; overflow-x:auto;
 }
+.chart-editor-bar .btn{flex:none;}
 .chart-editor-body{flex:1; min-height:0; display:flex; flex-direction:column;}
 .chart-editor-pane{flex:1; min-height:0; overflow-y:auto; padding:14px 16px;}
 .chart-editor-pane.preview{border-top:1px solid var(--border); background:var(--bg-elev);}
@@ -219,6 +220,9 @@ nav#tabbar .brand{display:none;}
 .chart-section-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
 .chart-badge{font-size:12px; font-weight:700; background:var(--accent); color:var(--accent-ink); border-radius:6px; padding:2px 9px; min-width:22px; text-align:center; cursor:pointer; border:0;}
 .chart-name{font-size:12px; color:var(--text-dim); background:none; border:0; flex:1; min-width:0;}
+.chart-repeat-tag{font-size:12px; font-weight:700; color:var(--accent); flex:none;}
+.chart-dup-btn{border:1px solid var(--border); background:var(--bg-elev-2); color:var(--text-dim); border-radius:6px; width:28px; height:28px; font-size:14px; cursor:pointer; flex:none;}
+.chart-dup-btn:hover{color:var(--text); border-color:var(--text-faint);}
 .chart-section-actions{display:flex; gap:4px;}
 .chart-grid{display:grid; grid-template-columns:repeat(4,1fr); border-top:0.5px solid var(--border); border-left:0.5px solid var(--border);}
 .chart-cell{
@@ -227,6 +231,10 @@ nav#tabbar .brand{display:none;}
   min-height:var(--tap); display:flex; align-items:center; justify-content:center; background:none; color:var(--accent);
 }
 .chart-cell.muted{color:var(--text-faint); font-size:17px;}
+.chart-cell-multi{display:flex; align-items:center; justify-content:center; gap:4px; width:100%;}
+.chart-cell-multi span{flex:1; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.chart-cell-multi.stacked{flex-direction:column; gap:1px;}
+.chart-cell-multi.stacked span{font-size:0.55em; flex:none;}
 .chart-cell.add-cell{color:var(--text-faint); font-size:20px; font-family:var(--font-ui); font-weight:400;}
 .chart-cell .ending-tag{
   position:absolute; top:2px; left:4px; font-size:10px; font-weight:400; font-family:var(--font-ui); color:var(--text-dim);
@@ -729,6 +737,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <div style="font-size:12px; color:var(--text-dim);" id="chartEditorSongTitle"></div>
     </div>
     <button class="btn small" id="btnGenerateChart" title="Generar desde la letra">Desde la letra</button>
+    <button class="btn small" id="btnChartTemplates" title="Insertar una progresión común">Plantillas</button>
     <button class="btn small" id="btnChartHelp" title="Ayuda">?</button>
   </div>
   <div class="chart-editor-body">
@@ -856,11 +865,14 @@ function extractChordsFromChart(chart){
     (section.measures||[]).forEach(measure=>{
       const tok = (measure.text||'').trim();
       if(!tok || isMeasureSpecial(tok)) return;
-      const m = tok.match(CHORD_TOKEN_RE);
-      if(!m) return;
-      const idx = NOTE_INDEX[m[1]+m[2]];
-      if(idx === undefined) return;
-      chords.push({root:idx, quality:qualityBucket(m[3])});
+      // A measure can hold more than one chord ("Am Dm" = split bar) — walk each.
+      tok.split(/\s+/).forEach(sub=>{
+        const m = sub.match(CHORD_TOKEN_RE);
+        if(!m) return;
+        const idx = NOTE_INDEX[m[1]+m[2]];
+        if(idx === undefined) return;
+        chords.push({root:idx, quality:qualityBucket(m[3])});
+      });
     });
   });
   return chords;
@@ -963,7 +975,7 @@ function reharmonizeChart(chart, tonic, isMinor){
   (clone.sections||[]).forEach(section=>{
     (section.measures||[]).forEach(measure=>{
       if(measure.text && !isMeasureSpecial(measure.text)){
-        measure.text = reharmonizeToken(measure.text.trim(), tonic, isMinor);
+        measure.text = measure.text.trim().replace(/\S+/g, tok => reharmonizeToken(tok, tonic, isMinor));
       }
     });
   });
@@ -1045,7 +1057,10 @@ function uniqueChordTokensOfSong(song){
     if(isChordLine(line)) (line.match(/\S+/g)||[]).forEach(add);
   });
   ((song.chordChart && song.chordChart.sections) || []).forEach(section=>{
-    (section.measures||[]).forEach(m=>{ if(!isMeasureSpecial(m.text)) add(m.text); });
+    (section.measures||[]).forEach(m=>{
+      if(isMeasureSpecial(m.text)) return;
+      (m.text||'').trim().split(/\s+/).forEach(add);
+    });
   });
   return tokens;
 }
@@ -1551,11 +1566,7 @@ function parseChartText(text){
   lines.forEach(line=>{
     const headerMatch = line.trim().match(/^\[(.+)\]$/);
     if(headerMatch){
-      const inner = headerMatch[1];
-      const colonIdx = inner.indexOf(':');
-      const label = (colonIdx>=0 ? inner.slice(0,colonIdx) : inner).trim();
-      const name = colonIdx>=0 ? inner.slice(colonIdx+1).trim() : '';
-      current = { label: label || '?', name, measures: [] };
+      current = Object.assign({ measures: [] }, parseSectionHeader(headerMatch[1]));
       sections.push(current);
       return;
     }
@@ -1563,17 +1574,29 @@ function parseChartText(text){
     if(!line.includes('|')){
       // A bare line with no "|" and no brackets: treat as one single measure,
       // so a one-chord section (rare) still works without forcing a "|".
-      if(!current){ current = {label:'A', name:'', measures:[]}; sections.push(current); }
+      if(!current){ current = {label:'A', name:'', repeat:0, measures:[]}; sections.push(current); }
       current.measures.push(parseMeasureToken(line));
       return;
     }
-    if(!current){ current = {label:'A', name:'', measures:[]}; sections.push(current); }
+    if(!current){ current = {label:'A', name:'', repeat:0, measures:[]}; sections.push(current); }
     line.split('|').forEach(seg=>{
       const t = seg.trim();
       if(t) current.measures.push(parseMeasureToken(t));
     });
   });
   return { sections };
+}
+// Header content can optionally end in "x2"/"×3" to mean "repeat this whole
+// section N times" (shown as a "× N" badge) — separate from "%", which only
+// repeats a single measure.
+function parseSectionHeader(inner){
+  let repeat = 0;
+  const repMatch = inner.match(/^(.*?)\s*[x×]\s*(\d+)\s*$/i);
+  if(repMatch){ inner = repMatch[1].trim(); repeat = parseInt(repMatch[2],10); }
+  const colonIdx = inner.indexOf(':');
+  const label = (colonIdx>=0 ? inner.slice(0,colonIdx) : inner).trim();
+  const name = colonIdx>=0 ? inner.slice(colonIdx+1).trim() : '';
+  return { label: label || '?', name, repeat };
 }
 function parseMeasureToken(tok){
   const m = tok.trim().match(/^(.*?)\((1|2)\)$/);
@@ -1586,7 +1609,7 @@ function measureToToken(m){
 function chartToText(chart){
   const sections = (chart && chart.sections) || [];
   return sections.map(s=>{
-    const header = '[' + s.label + (s.name ? ': '+s.name : '') + ']';
+    const header = '[' + s.label + (s.name ? ': '+s.name : '') + ((s.repeat||0)>1 ? ' x'+s.repeat : '') + ']';
     const rows = [];
     for(let i=0;i<s.measures.length;i+=4){
       rows.push(s.measures.slice(i,i+4).map(measureToToken).join(' | '));
@@ -1596,14 +1619,49 @@ function chartToText(chart){
 }
 function updateChartPreview(){
   editorChart = parseChartText(document.getElementById('fChartText').value);
-  const html = renderChordChartHtml(editorChart, 0)
-    || '<div class="hint">(Escribe una sección para ver la vista previa)</div>';
   const inline = document.getElementById('chartPreview');
   const full = document.getElementById('chartPreviewFull');
-  if(inline) inline.innerHTML = html;
-  if(full) full.innerHTML = html;
+  const emptyMsg = '<div class="hint">(Escribe una sección para ver la vista previa)</div>';
+  if(inline) inline.innerHTML = renderChordChartHtml(editorChart, 0, false) || emptyMsg;
+  if(full) full.innerHTML = renderChordChartHtml(editorChart, 0, true) || emptyMsg;
 }
 document.getElementById('fChartText').addEventListener('input', updateChartPreview);
+
+// Auto-fixes common typing slips in chart measure lines (never touches
+// [Section] header lines, so names/labels are never mangled). The "live"
+// pass only does 1-for-1 character swaps so the cursor position stays put
+// while typing; the "final" pass (on blur) also collapses things like
+// accidental double sharps once the user is done with that line.
+function normalizeChartLive(text){
+  return text.split('\n').map(line=>{
+    const trimmed = line.trim();
+    if(!trimmed || /^\[.*\]$/.test(trimmed)) return line;
+    return line.split(/(\s+|\|)/).map(part=>{
+      if(part==='|' || /^\s+$/.test(part) || !part) return part;
+      let p = part.replace(/♯/g,'#').replace(/♭/g,'b');
+      if(/^[a-g][a-zA-Z0-9#b().%]*$/.test(p)) p = p[0].toUpperCase() + p.slice(1);
+      return p;
+    }).join('');
+  }).join('\n');
+}
+function normalizeChartFinal(text){
+  return normalizeChartLive(text).split('\n').map(line=>{
+    const trimmed = line.trim();
+    if(!trimmed || /^\[.*\]$/.test(trimmed)) return line;
+    return line.replace(/#{2,}/g,'#').replace(/b{2,}/g,'b');
+  }).join('\n');
+}
+document.getElementById('fChartText').addEventListener('input', e=>{
+  const ta = e.target;
+  const pos = ta.selectionStart;
+  const normalized = normalizeChartLive(ta.value);
+  if(normalized !== ta.value){ ta.value = normalized; ta.setSelectionRange(pos,pos); }
+});
+document.getElementById('fChartText').addEventListener('blur', e=>{
+  const ta = e.target;
+  const normalized = normalizeChartFinal(ta.value);
+  if(normalized !== ta.value){ ta.value = normalized; updateChartPreview(); }
+});
 
 /* ---- fullscreen chart editor: opening/closing ---- */
 function openChartEditorScreen(){
@@ -1642,6 +1700,8 @@ Dm | G | C | %</pre>
       <p style="margin-bottom:6px;"><strong style="color:var(--text);">%</strong> — repetir el compás anterior</p>
       <p style="margin-bottom:6px;"><strong style="color:var(--text);">(1)</strong> o <strong style="color:var(--text);">(2)</strong> — finales de repetición, pegado al acorde: <strong style="color:var(--text);">CM7(1)</strong></p>
       <p style="margin-bottom:6px;"><strong style="color:var(--text);">[B: Melo]</strong> — sección con nombre opcional después de los dos puntos</p>
+      <p style="margin-bottom:6px;"><strong style="color:var(--text);">Am Dm | G</strong> — dos acordes en un mismo compás, separados por espacio</p>
+      <p style="margin-bottom:6px;"><strong style="color:var(--text);">[B: Coro x2]</strong> — repite toda la sección esa cantidad de veces (distinto de "%", que solo repite un compás)</p>
     </div>
     <div class="sheet-actions">
       <button class="btn primary" id="sheetOk" style="flex:1;">Entendido</button>
@@ -1658,7 +1718,7 @@ function generateChartFromLyrics(lyricsText){
   const sections = [];
   let current = null;
   function startSection(label){
-    current = { label: label || String.fromCharCode(65+sections.length), name:'', measures:[] };
+    current = { label: label || String.fromCharCode(65+sections.length), name:'', repeat:0, measures:[] };
     sections.push(current);
   }
   lines.forEach(line=>{
@@ -1695,6 +1755,64 @@ document.getElementById('btnGenerateChart').addEventListener('click', ()=>{
   } else {
     applyIt();
   }
+});
+
+/* ---- quick-insert progressions, and duplicating a section ---- */
+const CHART_TEMPLATES = [
+  { name:'I – IV – V – vi (pop)', chords:'C | F | G | Am' },
+  { name:'vi – IV – I – V (pop)', chords:'Am | F | C | G' },
+  { name:'I – V – vi – IV', chords:'C | G | Am | F' },
+  { name:'ii – V – I (jazz)', chords:'Dm7 | G7 | CM7 | CM7' },
+  { name:'Blues de 12 compases', chords:'A7 | A7 | A7 | A7\nD7 | D7 | A7 | A7\nE7 | D7 | A7 | E7' },
+  { name:'12 compases en menor', chords:'Am | Am | Am | Am\nDm | Dm | Am | Am\nEm | Dm | Am | Em' },
+];
+function nextChartSectionLabel(text){
+  const used = parseChartText(text).sections.map(s=>s.label);
+  const letters = 'ABCDEFGHIJ';
+  for(const l of letters) if(!used.includes(l)) return l;
+  return '?';
+}
+document.getElementById('btnChartTemplates').addEventListener('click', ()=>{
+  const rows = CHART_TEMPLATES.map((t,i)=>`
+    <div class="picker-row" data-tpl-idx="${i}" style="cursor:pointer;">
+      <div class="info"><div class="t">${escapeHtml(t.name)}</div><div class="a" style="font-family:var(--font-mono);">${escapeHtml(t.chords.replace(/\n/g,'  '))}</div></div>
+    </div>`).join('');
+  openSheetHtml(`
+    <h2>Plantillas de progresión</h2>
+    <div class="hint" style="margin:-4px 0 4px;">Toca una para agregarla como nueva sección al final.</div>
+    <div class="picker-list">${rows}</div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cerrar</button>
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.querySelectorAll('[data-tpl-idx]').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      const tpl = CHART_TEMPLATES[Number(row.dataset.tplIdx)];
+      const ta = document.getElementById('fChartText');
+      const label = nextChartSectionLabel(ta.value);
+      const block = `[${label}]\n${tpl.chords}`;
+      ta.value = ta.value.trim() ? ta.value.replace(/\n+$/,'') + '\n\n' + block : block;
+      updateChartPreview();
+      closeSheet();
+      toast('Progresión agregada');
+    });
+  });
+});
+function duplicateChartSection(index){
+  const ta = document.getElementById('fChartText');
+  const chart = parseChartText(ta.value);
+  const src = chart.sections[index];
+  if(!src) return;
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.label = nextChartSectionLabel(ta.value);
+  chart.sections.splice(index+1, 0, copy);
+  ta.value = chartToText(chart);
+  updateChartPreview();
+  toast('Sección duplicada');
+}
+document.getElementById('chartPreviewFull').addEventListener('click', e=>{
+  const btn = e.target.closest('[data-dup-section]');
+  if(btn) duplicateChartSection(Number(btn.dataset.dupSection));
 });
 
 /* ---- voice assignment: line-by-line UI instead of manual bracket tags ---- */
@@ -2388,28 +2506,36 @@ function transposeMeasureText(text, semitones){
   if(!t || isMeasureSpecial(t) || semitones === 0) return t;
   return t.replace(/\S+/g, tok => isChordToken(tok) ? transposeToken(tok, semitones) : tok);
 }
-function chartSectionHtml(section){
+function chartSectionHtml(section, interactive){
   const measuresHtml = (section.measures||[]).map(m=>{
     const displayText = transposeMeasureText(m.text, section.__semitones || 0);
     const special = isMeasureSpecial(m.text);
     const endingTag = m.ending ? `<span class="ending-tag">${escapeHtml(m.ending)}.</span>` : '';
     const cls = 'chart-cell chartfont' + (special ? ' muted' : '');
-    return `<div class="${cls}">${endingTag}${escapeHtml(displayText)}</div>`;
+    const subChords = special ? [displayText] : displayText.split(/\s+/).filter(Boolean);
+    const inner = subChords.length > 1
+      ? `<div class="chart-cell-multi${subChords.length>2?' stacked':''}">${subChords.map(c=>`<span>${escapeHtml(c)}</span>`).join('')}</div>`
+      : escapeHtml(subChords[0] || '');
+    return `<div class="${cls}">${endingTag}${inner}</div>`;
   }).join('');
   const nameHtml = section.name ? `<span class="chart-name">${escapeHtml(section.name)}</span>` : '';
+  const repeatTag = (section.repeat||0) > 1 ? `<span class="chart-repeat-tag">× ${section.repeat}</span>` : '';
+  const dupBtn = interactive ? `<button type="button" class="chart-dup-btn" data-dup-section="${section.__idx}" title="Duplicar sección">⧉</button>` : '';
   return `
     <div class="chart-section">
       <div class="chart-section-head">
         <span class="chart-badge">${escapeHtml(section.label||'?')}</span>
+        ${repeatTag}
         ${nameHtml}
+        ${dupBtn}
       </div>
       <div class="chart-grid">${measuresHtml}</div>
     </div>`;
 }
-function renderChordChartHtml(chart, semitones){
+function renderChordChartHtml(chart, semitones, interactive){
   const sections = (chart && chart.sections) || [];
   if(!sections.length) return '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
-  return sections.map(s=>{ s.__semitones = semitones; return chartSectionHtml(s); }).join('');
+  return sections.map((s,i)=>{ s.__semitones = semitones; s.__idx = i; return chartSectionHtml(s, interactive); }).join('');
 }
 
 function renderLyrics(song){
