@@ -556,7 +556,11 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           <button class="btn" id="btnImportPdf" title="Importar desde un PDF de acordes">
             <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg> Importar PDF
           </button>
+          <button class="btn" id="btnImportPdfPlaylist" title="Importar un PDF con varias canciones (cancionero/playlist de iReal Pro)">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><rect x="8" y="12" width="8" height="2" rx="0.5"/><rect x="8" y="16" width="8" height="2" rx="0.5"/></svg> Varias canciones
+          </button>
           <input type="file" id="filePdfImport" accept="application/pdf" class="hidden">
+          <input type="file" id="filePdfPlaylistImport" accept="application/pdf" class="hidden">
         </div>
       </div>
       <div class="search">
@@ -3562,6 +3566,350 @@ async function pdfFileToChordChart(file){
   }
   return pdfExtractChordChart(pages);
 }
+
+/* ============================================================
+   MULTI-SONG PDF PLAYLIST IMPORT (iReal Pro Spanish accessibility text)
+   Ported from a Python prototype refined against several real files —
+   the notes below explain WHY each piece works this way, not just what
+   it does, since this format has more sharp edges than it looks like.
+   ============================================================ */
+const NOTE_ES = {'do':'C','re':'D','mi':'E','fa':'F','sol':'G','la':'A','si':'B'};
+const NOTE_NAMES_BY_LEN = Object.keys(NOTE_ES).sort((a,b)=>b.length-a.length);
+
+// Some PDFs glue two words together with no space ("mido" = "mi"+"do").
+// Rather than chase every glued pair in the raw text, the parser recognizes
+// a note name at the START of a token and treats the rest as a separate
+// token — guarded so it doesn't fire on ordinary words that happen to start
+// with a note-name substring ("Repeat" starts with "re").
+function matchNotePrefixEs(word){
+  const wl = word.toLowerCase();
+  for(const name of NOTE_NAMES_BY_LEN){
+    if(wl.startsWith(name) && wl.length > name.length){
+      const remainder = word.slice(name.length);
+      const rl = remainder.toLowerCase();
+      const plausible = (rl in NOTE_ES) || /^\d/.test(remainder) ||
+        ['sostenido','bemol','menor','sobre'].some(k=>rl.startsWith(k));
+      if(plausible) return [name, remainder];
+    }
+  }
+  return [null, word];
+}
+
+function parseChordRunEs(descWordsIn){
+  const descWords = descWordsIn.slice();
+  const chords = [];
+  let i = 0;
+  let lastQual = '', lastDigits = '', lastRoot = null;
+  while(i < descWords.length){
+    const w = descWords[i].toLowerCase().replace(/,$/, '');
+    let matchedNote = null;
+    if(w in NOTE_ES){
+      matchedNote = w;
+    } else {
+      const [prefix, remainder] = matchNotePrefixEs(descWords[i]);
+      if(prefix){ matchedNote = prefix; descWords.splice(i+1, 0, remainder); }
+    }
+    let n = descWords.length;
+    if(matchedNote){
+      const root = NOTE_ES[matchedNote];
+      i += 1;
+      let acc = '';
+      if(i<n && descWords[i]==='Sostenido'){ acc='#'; i++; }
+      else if(i<n && descWords[i]==='Bemol'){ acc='b'; i++; }
+      let qual = '', explicitQual = false;
+      if(i<n && descWords[i]==='Menor'){ qual='m'; i++; explicitQual=true; }
+      else if(i<n && descWords[i]==='Mayor'){
+        // "Mayor" only gets stated explicitly when qualifying an extension
+        // (almost always "Mayor 7" = major7) — a plain major triad is never
+        // spelled out, since major is the unmarked default everywhere else.
+        qual='M'; i++; explicitQual=true;
+      }
+      let digits = '';
+      if(i<n && /^\d+$/.test(descWords[i])){ digits=descWords[i]; i++; explicitQual=true; }
+      let bass = '';
+      if(i<n && descWords[i]==='Sobre'){
+        i++; n = descWords.length;
+        const bassExact = i<n && (descWords[i].toLowerCase() in NOTE_ES);
+        let bassPrefix=null, bassRemainder=null;
+        if(!bassExact && i<n){ [bassPrefix, bassRemainder] = matchNotePrefixEs(descWords[i]); }
+        if(bassExact || bassPrefix){
+          const bassroot = bassExact ? NOTE_ES[descWords[i].toLowerCase()] : NOTE_ES[bassPrefix];
+          if(bassPrefix){ descWords.splice(i+1, 0, bassRemainder); n = descWords.length; }
+          i++;
+          let bassacc = '';
+          if(i<n && descWords[i]==='Sostenido'){ bassacc='#'; i++; }
+          else if(i<n && descWords[i]==='Bemol'){ bassacc='b'; i++; }
+          bass = '/' + bassroot + bassacc;
+        }
+      }
+      // Only inherit quality from the previous chord when it's genuinely the
+      // SAME root repeated with a new bass (a walking-bass continuation,
+      // e.g. "Dm ... Dm7/F Dm7/D") — a bare chord on a DIFFERENT root
+      // ("Am" then "C/G") is its own new harmony and stays bare/major.
+      if(!explicitQual && chords.length && bass && (root+acc)===lastRoot){
+        qual = lastQual; digits = lastDigits;
+      } else {
+        lastQual = qual; lastDigits = digits;
+      }
+      lastRoot = root+acc;
+      chords.push(root+acc+qual+digits+bass);
+    } else {
+      i++;
+    }
+  }
+  return chords;
+}
+
+function parseSongTextEs(raw){
+  const titleM = raw.match(/Título:\s*(.+?)\s*(?:Estilo:|$)/s);
+  const artistM = raw.match(/Compositor:\s*(.+?)(?:\n|Abriendo|Símbolo|Tiempo|$)/s);
+  const title = titleM ? titleM[1].trim() : '?';
+  const artist = artistM ? artistM[1].trim() : '';
+
+  let body = raw;
+  const compIdx = raw.indexOf('Compositor:');
+  if(compIdx >= 0){
+    body = raw.slice(compIdx).replace(/^Compositor:.*?(?=Abriendo|Símbolo|Tiempo|Compás)/s, '');
+  }
+
+  const EVENT_RE = new RegExp(
+    'Abriendo línea de barra de repetición' +
+    '|Cerrando línea de barra de repetición' +
+    '|Abriendo línea de doble barra' +
+    '|Cerrando línea de doble barra' +
+    '|Símbolo de ensayo:\\s*(?<ensayo>[A-Z])' +
+    '|Símbolo:\\s*Repetir los dos compases anteriores' +
+    '|Símbolo:\\s*Repetir el compás anterior' +
+    '|Símbolo:\\s*No acorde' +
+    '|Símbolo:\\s*(?<symname>[A-Za-zÀ-ÿ]+)' +
+    '|Primer final' +
+    '|Segundo final' +
+    '|Compás\\s+(?<measnum>\\d+),\\s*(?<measdesc>.*?)(?=Compás\\s+\\d+,|Abriendo|Cerrando|Símbolo|Primer final|Segundo final|\\bx\\d+\\b|$)' +
+    '|(?<repcount>x\\d+)\\b'
+  , 'gs');
+
+  const sections = [];
+  let cur = null, pendingEnding = null;
+  const repeatStack = [];
+  const notesSet = new Set();
+  const secCounter = {};
+  function newSection(labelBase){
+    const base = labelBase || 'A';
+    const n = (secCounter[base]||0) + 1;
+    secCounter[base] = n;
+    const s = { label: n===1?base:(base+n), name:'', repeat:0, measures:[] };
+    sections.push(s);
+    return s;
+  }
+
+  let lastLabel = null, m;
+  while((m = EVENT_RE.exec(body)) !== null){
+    const tok = m[0];
+    if(tok === 'Abriendo línea de barra de repetición'){
+      repeatStack.push('rep');
+    } else if(tok === 'Cerrando línea de barra de repetición'){
+      if(repeatStack.length && repeatStack[repeatStack.length-1]==='rep'){
+        repeatStack.pop();
+        if(cur && !cur.repeat) cur.repeat = 2;
+      }
+    } else if(tok === 'Abriendo línea de doble barra'){
+      repeatStack.push('dbl');
+    } else if(tok === 'Cerrando línea de doble barra'){
+      if(repeatStack.length && repeatStack[repeatStack.length-1]==='dbl') repeatStack.pop();
+    } else if(tok.startsWith('Símbolo de ensayo:')){
+      lastLabel = m.groups.ensayo;
+      cur = newSection(lastLabel);
+      pendingEnding = null;
+    } else if(tok === 'Símbolo: Repetir los dos compases anteriores'){
+      if(!cur) cur = newSection(lastLabel);
+      cur.measures.push({text:'%', ending:pendingEnding});
+      cur.measures.push({text:'%', ending:pendingEnding});
+    } else if(tok === 'Símbolo: Repetir el compás anterior'){
+      if(!cur) cur = newSection(lastLabel);
+      cur.measures.push({text:'%', ending:pendingEnding});
+    } else if(tok === 'Símbolo: No acorde'){
+      if(!cur) cur = newSection(lastLabel);
+      cur.measures.push({text:'N.C.', ending:pendingEnding});
+    } else if(tok === 'Primer final'){
+      pendingEnding = '1';
+    } else if(tok === 'Segundo final'){
+      pendingEnding = '2';
+    } else if(tok.startsWith('Símbolo:')){
+      const name = m.groups.symname;
+      if(name && name !== 'Barra'){
+        if(name==='Segno' || name==='Fine'){
+          notesSet.add(name);
+        } else if(name==='Coda'){
+          notesSet.add('Coda');
+          if(cur && cur.measures.length) cur = newSection('Coda');
+          else if(cur && !cur.name) cur.name = 'Coda';
+        } else if(!cur || !cur.measures.length){
+          if(!cur) cur = newSection(null);
+          if(!cur.name) cur.name = name;
+        } else {
+          cur = newSection(name[0].toUpperCase());
+          cur.name = name;
+        }
+      }
+    } else if(tok.startsWith('Compás')){
+      const desc = m.groups.measdesc || '';
+      if(!cur) cur = newSection(lastLabel);
+      const words = desc.match(/[A-Za-zÀ-ÿ]+|\d+/g) || [];
+      const chords = parseChordRunEs(words);
+      if(chords.length) cur.measures.push({text: chords.join(' '), ending: pendingEnding});
+    } else if(/^x\d+$/.test(tok)){
+      if(cur) cur.repeat = parseInt(tok.slice(1), 10);
+    }
+  }
+
+  if(body.includes('D.S.') || body.includes('Coda') || body.includes('Segno')){
+    notesSet.add('Contiene D.S./Coda/Segno — revisar manualmente el orden de repetición, no reconstruido automáticamente.');
+  }
+  const finalSections = sections.filter(s => s.measures.length);
+  if(finalSections.some(s => s.repeat > 1)){
+    notesSet.add('Revisar corchetes de repetición contra el PDF original — pueden aplicar a una parte de la sección, no a toda.');
+  }
+  return { title, artist, sections: finalSections, notes: Array.from(notesSet).sort().join(' ') };
+}
+
+// Loads every page's accessibility-text layer in NATURAL (content-stream)
+// order — critical, because this format often has multiple invisible text
+// runs positioned at overlapping coordinates, and sorting by position
+// interleaves their characters into garbage. PDF.js's getTextContent()
+// already returns items in stream order, so we deliberately never re-sort.
+async function pdfPlaylistToSongs(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  const pageTexts = [];
+  for(let pnum=1; pnum<=pdf.numPages; pnum++){
+    const page = await pdf.getPage(pnum);
+    const viewport = page.getViewport({scale:1});
+    const content = await page.getTextContent();
+    const items = [];
+    content.items.forEach(item=>{
+      if(!item.str) return;
+      const tx = item.transform;
+      const fontSize = Math.sqrt(tx[2]*tx[2] + tx[3]*tx[3]);
+      const x0 = tx[4];
+      const top = viewport.height - tx[5];
+      items.push({ str:item.str, x0, x1:x0+(item.width||0), top, size:fontSize });
+    });
+    // The accessibility text sits in a narrow small-font band, distinct
+    // from the big visual chart text (if any) and the tiny page-footer —
+    // detected per-page since different exports use different sizes.
+    const sizeCounts = {};
+    items.forEach(it=>{ const s=Math.round(it.size); if(s>6 && s<13) sizeCounts[s]=(sizeCounts[s]||0)+1; });
+    let bodySize = null, bestCount = 0;
+    Object.entries(sizeCounts).forEach(([s,c])=>{ if(c>bestCount){ bestCount=c; bodySize=Number(s); } });
+    const accessItems = bodySize ? items.filter(it=>Math.round(it.size)===bodySize) : [];
+    let text = '', prev = null;
+    accessItems.forEach(it=>{
+      if(prev){
+        const sameLine = Math.abs(it.top - prev.top) < 2;
+        if(!sameLine || (it.x0 - prev.x1) > 1.5) text += ' ';
+      }
+      text += it.str;
+      prev = it;
+    });
+    pageTexts.push(text);
+  }
+  let full = pageTexts.join('\n');
+  // A handful of known structural keywords sometimes get glued to the
+  // preceding word with no space (a layout quirk in some exports).
+  const kwRe = /(?<=[a-zíáéóúñA-Z])(Barra|Compás|Símbolo|Abriendo|Cerrando|Tiempo)/g;
+  full = full.replace(kwRe, ' $1');
+
+  const titlePositions = [];
+  const titleRe = /Título:/g;
+  let tm;
+  while((tm = titleRe.exec(full)) !== null) titlePositions.push(tm.index);
+  titlePositions.push(full.length);
+
+  const songs = [];
+  for(let i=0; i<titlePositions.length-1; i++){
+    const block = full.slice(titlePositions[i], titlePositions[i+1]);
+    const r = parseSongTextEs(block);
+    if(r.sections.length) songs.push(r);
+  }
+  return songs;
+}
+
+let pdfPlaylistPending = [];
+function openPdfPlaylistReview(songs){
+  pdfPlaylistPending = songs.map(s => ({ ...s, include: true }));
+  renderPdfPlaylistReview();
+}
+function renderPdfPlaylistReview(){
+  const rows = pdfPlaylistPending.map((s, i) => {
+    const measureCount = s.sections.reduce((sum, sec) => sum + sec.measures.length, 0);
+    const warn = s.notes ? `<div class="hint" style="margin-top:2px; color:var(--text-dim);">⚠ ${escapeHtml(s.notes)}</div>` : '';
+    return `
+      <label class="picker-row" style="cursor:pointer;">
+        <input type="checkbox" data-playlist-idx="${i}" ${s.include ? 'checked' : ''} style="margin-right:10px; flex:none;">
+        <div class="info">
+          <div class="t">${escapeHtml(s.title)}</div>
+          <div class="a">${escapeHtml(s.artist || 'Sin artista')} · ${s.sections.length} secciones, ${measureCount} compases</div>
+          ${warn}
+        </div>
+      </label>`;
+  }).join('');
+  const includedCount = pdfPlaylistPending.filter(s => s.include).length;
+  openSheetHtml(`
+    <h2>Revisar canciones (${pdfPlaylistPending.length})</h2>
+    <div class="hint" style="margin:-4px 0 4px;">Reconstruido desde el PDF — desmarca las que no quieras importar, y revisa las que tengan advertencia antes de usarlas en vivo.</div>
+    <div class="picker-list" id="pdfPlaylistList" style="max-height:50vh; overflow-y:auto;">${rows}</div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
+      <button class="btn primary" id="btnImportPlaylistSelected" style="flex:1;">Importar (${includedCount})</button>
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.getElementById('pdfPlaylistList').addEventListener('change', e=>{
+    const cb = e.target.closest('[data-playlist-idx]');
+    if(!cb) return;
+    pdfPlaylistPending[Number(cb.dataset.playlistIdx)].include = cb.checked;
+    const n = pdfPlaylistPending.filter(s => s.include).length;
+    document.getElementById('btnImportPlaylistSelected').textContent = `Importar (${n})`;
+  });
+  document.getElementById('btnImportPlaylistSelected').addEventListener('click', ()=>{
+    const toImport = pdfPlaylistPending.filter(s => s.include);
+    toImport.forEach(s=>{
+      state.songs.push({
+        id: uid(), title: s.title, artist: s.artist || '', bpm: 100, key: '',
+        notes: s.notes ? 'Importado de un PDF con varias canciones. ' + s.notes : 'Importado de un PDF con varias canciones.',
+        lyrics: '', chordChart: { sections: s.sections }, transpose: 0, capo: 0, updatedAt: todayISO()
+      });
+    });
+    saveState();
+    renderLibrary();
+    closeSheet();
+    toast(`${toImport.length} canción(es) importada(s)`);
+  });
+}
+
+document.getElementById('btnImportPdfPlaylist').addEventListener('click', ()=>{
+  if(typeof pdfjsLib === 'undefined'){
+    toast('No se pudo cargar el lector de PDF — revisa tu conexión a internet e intenta de nuevo');
+    return;
+  }
+  document.getElementById('filePdfPlaylistImport').click();
+});
+document.getElementById('filePdfPlaylistImport').addEventListener('change', async e=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  toast('Leyendo PDF… puede tardar unos segundos con muchas páginas');
+  try{
+    const songs = await pdfPlaylistToSongs(file);
+    if(!songs.length){
+      toast('No se reconoció ninguna canción en este PDF. ¿Es del formato de iReal Pro con varias canciones?');
+      return;
+    }
+    openPdfPlaylistReview(songs);
+  }catch(err){
+    console.error('Error al leer el PDF de varias canciones:', err);
+    toast('No se pudo leer este PDF. Puede que esté protegido, dañado, o en un formato distinto.');
+  }
+});
 
 function openPdfReviewSheet(parsed){
   openSheetHtml(`
