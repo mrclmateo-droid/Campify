@@ -186,10 +186,11 @@ nav#tabbar .brand{display:none;}
 .empty .big{font-size:15px; color:var(--text); margin-bottom:6px; font-weight:600;}
 
 /* ---- fullscreen chord chart editor ---- */
-#chartEditorScreen, #lyricsEditorScreen{
+#chartEditorScreen, #lyricsEditorScreen, #cellEditorScreen{
   position:fixed; inset:0; z-index:140; background:var(--bg); display:flex; flex-direction:column;
 }
-#chartEditorScreen.hidden, #lyricsEditorScreen.hidden{display:none;}
+#cellEditorScreen{z-index:150;} /* opens ON TOP of the chart editor, so it needs to win the stack */
+#chartEditorScreen.hidden, #lyricsEditorScreen.hidden, #cellEditorScreen.hidden{display:none;}
 .chart-editor-bar{
   display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border);
   padding-top:calc(10px + env(safe-area-inset-top)); flex:none; overflow-x:auto;
@@ -207,6 +208,34 @@ nav#tabbar .brand{display:none;}
   width:100%; height:100%; min-height:240px; font-size:16px; border:0; background:none; outline:none;
   font-family:var(--font-mono); line-height:1.7; white-space:pre; color:var(--text); resize:none;
 }
+
+/* ---- single-measure cell editor ---- */
+.cell-editor-body{flex:1; min-height:0; overflow-y:auto; padding:18px 16px; display:flex; flex-direction:column; gap:18px;}
+.cell-editor-preview{
+  background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius);
+  min-height:70px; display:flex; align-items:center; justify-content:center; font-size:28px; color:var(--accent);
+  padding:10px;
+}
+#cellEditorInput{
+  background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius);
+  padding:12px; color:var(--text); width:100%;
+}
+#cellEditorInput:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent);}
+.cell-editor-label{font-size:11px; color:var(--text-dim); font-weight:600; letter-spacing:.02em; text-transform:uppercase;}
+.cell-editor-endings{display:flex; flex-direction:column; gap:8px;}
+.cell-editor-ending-btns{display:flex; gap:8px;}
+.cell-editor-ending-btns .btn.active{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+.cell-editor-palette{display:flex; flex-direction:column; gap:14px;}
+.palette-row{display:flex; flex-direction:column; gap:6px;}
+.palette-btns{display:flex; flex-wrap:wrap; gap:6px;}
+.palette-btn{
+  background:var(--bg-elev); border:1px solid var(--border); border-radius:8px; color:var(--text);
+  font-family:var(--font-mono); font-size:14px; font-weight:700; padding:8px 10px; cursor:pointer; min-width:40px;
+}
+.palette-btn:active{background:var(--bg-elev-2);}
+.palette-btn.special{font-family:inherit; font-weight:600; font-size:12px;}
+.cell-editor-actions{display:flex; gap:8px; padding-top:4px; border-top:1px solid var(--border);}
+.cell-editor-actions .btn{flex:1;}
 @media(min-width:880px){
   .chart-editor-body{flex-direction:row;}
   .chart-editor-pane.preview{border-top:0; border-left:1px solid var(--border);}
@@ -257,6 +286,8 @@ nav#tabbar .brand{display:none;}
   min-height:var(--tap); display:flex; align-items:center; justify-content:center; background:none; color:var(--accent);
 }
 .chart-cell.muted{color:var(--text-faint); font-size:17px;}
+.chart-cell.tappable{cursor:pointer;}
+.chart-cell.tappable:active{background:var(--bg-elev-2);}
 .chart-cell-multi{display:flex; align-items:center; justify-content:center; gap:4px; width:100%;}
 .chart-cell-multi span{flex:1; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .chart-cell-multi.stacked{flex-direction:column; gap:1px;}
@@ -762,6 +793,56 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <button class="btn small" id="btnRestartScroll">Reiniciar scroll</button>
       <button class="btn small" id="btnToggleChordsPresent">Ocultar acordes</button>
       <button class="btn small" id="btnShowChordsPresent">Ver acordes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FULLSCREEN SINGLE-MEASURE (CELL) EDITOR ============ -->
+<div id="cellEditorScreen" class="hidden">
+  <div class="chart-editor-bar">
+    <button class="btn icon ghost" id="btnCloseCellEditor" title="Volver"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div style="flex:1; min-width:0;">
+      <div style="font-size:15px; font-weight:650;">Editar compás</div>
+      <div style="font-size:12px; color:var(--text-dim);" id="cellEditorContext"></div>
+    </div>
+    <button class="btn small danger" id="btnCellDelete">Eliminar</button>
+    <button class="btn small primary" id="btnCellSave">Listo</button>
+  </div>
+  <div class="cell-editor-body">
+    <div class="cell-editor-preview chartfont" id="cellEditorPreview"></div>
+    <input type="text" id="cellEditorInput" spellcheck="false" placeholder="Am Dm" style="font-family:var(--font-mono); font-size:22px; text-align:center;">
+
+    <div class="cell-editor-endings">
+      <span class="cell-editor-label">Final de repetición</span>
+      <div class="cell-editor-ending-btns">
+        <button type="button" class="btn small" id="btnCellEndNone">Ninguno</button>
+        <button type="button" class="btn small" id="btnCellEnd1">1.</button>
+        <button type="button" class="btn small" id="btnCellEnd2">2.</button>
+      </div>
+    </div>
+
+    <div class="cell-editor-palette">
+      <div class="palette-row">
+        <span class="cell-editor-label">Notas</span>
+        <div class="palette-btns" id="paletteNotes"></div>
+      </div>
+      <div class="palette-row">
+        <span class="cell-editor-label">Calidad</span>
+        <div class="palette-btns" id="paletteQuality"></div>
+      </div>
+      <div class="palette-row">
+        <span class="cell-editor-label">Bajo</span>
+        <div class="palette-btns" id="paletteBass"></div>
+      </div>
+      <div class="palette-row">
+        <span class="cell-editor-label">Especial</span>
+        <div class="palette-btns" id="paletteSpecial"></div>
+      </div>
+    </div>
+
+    <div class="cell-editor-actions">
+      <button type="button" class="btn" id="btnCellInsertBefore">+ Compás antes</button>
+      <button type="button" class="btn" id="btnCellInsertAfter">+ Compás después</button>
     </div>
   </div>
 </div>
@@ -1631,9 +1712,14 @@ function parseChartText(text){
       return;
     }
     if(!current){ current = {label:'A', name:'', repeat:0, measures:[]}; sections.push(current); }
-    line.split('|').forEach(seg=>{
+    // Keep interior empty measures (real "insert a blank bar to fill in
+    // later" placeholders) — only drop a truly trailing empty segment, the
+    // harmless artifact of a line typed with a dangling "|" at the end.
+    const segs = line.split('|');
+    segs.forEach((seg, si)=>{
       const t = seg.trim();
-      if(t) current.measures.push(parseMeasureToken(t));
+      if(!t && si === segs.length-1) return;
+      current.measures.push(parseMeasureToken(t));
     });
   });
   return { sections };
@@ -1916,8 +2002,149 @@ function duplicateChartSection(index){
   toast('Sección duplicada');
 }
 document.getElementById('chartPreviewFull').addEventListener('click', e=>{
-  const btn = e.target.closest('[data-dup-section]');
-  if(btn) duplicateChartSection(Number(btn.dataset.dupSection));
+  const dupBtn = e.target.closest('[data-dup-section]');
+  if(dupBtn){ duplicateChartSection(Number(dupBtn.dataset.dupSection)); return; }
+  const cell = e.target.closest('[data-cell-section]');
+  if(cell) openCellEditor(Number(cell.dataset.cellSection), Number(cell.dataset.cellMeasure));
+});
+
+/* ---- single-measure (cell) editor: tap any cell in the live chart
+   preview to edit just that measure in a focused fullscreen view, with a
+   tap-to-insert symbol palette instead of typing chord syntax by hand. ---- */
+let cellEditorCtx = null, cellEndingValue = null;
+function openCellEditor(sectionIdx, measureIdx){
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[sectionIdx];
+  const measure = section && section.measures[measureIdx];
+  if(!measure) return;
+  cellEditorCtx = { sectionIdx, measureIdx };
+  document.getElementById('cellEditorContext').textContent =
+    `Sección ${section.label}${section.name ? ' · '+section.name : ''} · compás ${measureIdx+1}`;
+  document.getElementById('cellEditorInput').value = measure.text || '';
+  setCellEnding(measure.ending);
+  updateCellEditorPreview();
+  document.getElementById('cellEditorScreen').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  setTimeout(()=>{
+    const inp = document.getElementById('cellEditorInput');
+    inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
+  }, 60);
+}
+function closeCellEditor(){
+  document.getElementById('cellEditorScreen').classList.add('hidden');
+  document.body.style.overflow = '';
+  cellEditorCtx = null;
+}
+function updateCellEditorPreview(){
+  const text = document.getElementById('cellEditorInput').value.trim();
+  const preview = document.getElementById('cellEditorPreview');
+  if(!text){ preview.innerHTML = '<span class="hint" style="font-size:14px;">(vacío)</span>'; return; }
+  if(isMeasureSpecial(text)){ preview.textContent = text; return; }
+  preview.innerHTML = text.split(/\s+/).filter(Boolean)
+    .map(c=>`<span style="margin:0 8px;">${escapeHtml(c)}</span>`).join('');
+}
+document.getElementById('cellEditorInput').addEventListener('input', updateCellEditorPreview);
+function setCellEnding(val){
+  cellEndingValue = val || null;
+  document.getElementById('btnCellEndNone').classList.toggle('active', !cellEndingValue);
+  document.getElementById('btnCellEnd1').classList.toggle('active', cellEndingValue==='1');
+  document.getElementById('btnCellEnd2').classList.toggle('active', cellEndingValue==='2');
+}
+document.getElementById('btnCellEndNone').addEventListener('click', ()=>setCellEnding(null));
+document.getElementById('btnCellEnd1').addEventListener('click', ()=>setCellEnding('1'));
+document.getElementById('btnCellEnd2').addEventListener('click', ()=>setCellEnding('2'));
+
+const CELL_PALETTE = {
+  paletteNotes: ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],
+  paletteQuality: ['m','7','M7','m7','dim','aug','sus2','sus4','add9','6','m6','9'],
+  paletteBass: ['/C','/D','/E','/F','/G','/A','/B'],
+  paletteSpecial: ['N.C.','%']
+};
+Object.entries(CELL_PALETTE).forEach(([containerId, items])=>{
+  const el = document.getElementById(containerId);
+  const special = containerId === 'paletteSpecial';
+  el.innerHTML = items.map(t=>`<button type="button" class="palette-btn${special?' special':''}" data-insert="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('');
+});
+// Notes get smart-spaced (start a new chord); qualities/bass attach right
+// where the cursor is (so tapping C then m then 7 builds "Cm7"); N.C./%
+// replace the whole field since a measure can't mix those with chords.
+function insertAtCursor(input, token){
+  if(token === 'N.C.' || token === '%'){
+    input.value = token;
+    input.setSelectionRange(token.length, token.length);
+    input.focus();
+    return;
+  }
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  const before = input.value.slice(0, start);
+  const after = input.value.slice(end);
+  const isNote = /^[A-G]/.test(token);
+  const needsSpace = isNote && before.length > 0 && !/\s$/.test(before);
+  const insertion = (needsSpace ? ' ' : '') + token;
+  input.value = before + insertion + after;
+  const newPos = start + insertion.length;
+  input.setSelectionRange(newPos, newPos);
+  input.focus();
+}
+document.querySelectorAll('.palette-btns').forEach(container=>{
+  container.addEventListener('click', e=>{
+    const btn = e.target.closest('[data-insert]');
+    if(!btn) return;
+    insertAtCursor(document.getElementById('cellEditorInput'), btn.dataset.insert);
+    updateCellEditorPreview();
+  });
+});
+document.getElementById('btnCellSave').addEventListener('click', ()=>{
+  if(!cellEditorCtx) return;
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[cellEditorCtx.sectionIdx];
+  const measure = section && section.measures[cellEditorCtx.measureIdx];
+  if(!measure){ closeCellEditor(); return; }
+  measure.text = document.getElementById('cellEditorInput').value.trim();
+  measure.ending = cellEndingValue;
+  document.getElementById('fChartText').value = chartToText(chart);
+  updateChartPreview();
+  closeCellEditor();
+  toast('Compás actualizado');
+});
+document.getElementById('btnCellDelete').addEventListener('click', ()=>{
+  if(!cellEditorCtx) return;
+  confirmSheet('Eliminar compás', '¿Eliminar este compás de la sección?', ()=>{
+    const chart = parseChartText(document.getElementById('fChartText').value);
+    const section = chart.sections[cellEditorCtx.sectionIdx];
+    if(section) section.measures.splice(cellEditorCtx.measureIdx, 1);
+    document.getElementById('fChartText').value = chartToText(chart);
+    updateChartPreview();
+    closeCellEditor();
+    toast('Compás eliminado');
+  }, 'Eliminar');
+});
+function insertMeasureRelative(offset){
+  if(!cellEditorCtx) return;
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[cellEditorCtx.sectionIdx];
+  if(!section) return;
+  const idx = cellEditorCtx.measureIdx + offset;
+  section.measures.splice(idx, 0, {text:'', ending:null});
+  document.getElementById('fChartText').value = chartToText(chart);
+  updateChartPreview();
+  cellEditorCtx.measureIdx = idx;
+  document.getElementById('cellEditorContext').textContent =
+    `Sección ${section.label}${section.name ? ' · '+section.name : ''} · compás ${idx+1}`;
+  document.getElementById('cellEditorInput').value = '';
+  setCellEnding(null);
+  updateCellEditorPreview();
+  document.getElementById('cellEditorInput').focus();
+  toast('Compás insertado');
+}
+document.getElementById('btnCellInsertBefore').addEventListener('click', ()=>insertMeasureRelative(0));
+document.getElementById('btnCellInsertAfter').addEventListener('click', ()=>insertMeasureRelative(1));
+document.getElementById('btnCloseCellEditor').addEventListener('click', closeCellEditor);
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape' && !document.getElementById('cellEditorScreen').classList.contains('hidden')){
+    closeCellEditor();
+  }
 });
 
 /* ---- voice assignment: line-by-line UI instead of manual bracket tags ---- */
@@ -2679,16 +2906,17 @@ function measureToSlots(measure, semitones, quarterSlots, eighthSlots){
   return { slots, eighthMode:true };
 }
 function chartSectionHtml(section, interactive){
-  const measuresHtml = (section.measures||[]).map(m=>{
+  const measuresHtml = (section.measures||[]).map((m,mi)=>{
     const displayText = transposeMeasureText(m.text, section.__semitones || 0);
     const special = isMeasureSpecial(m.text);
     const endingTag = m.ending ? `<span class="ending-tag">${escapeHtml(m.ending)}.</span>` : '';
-    const cls = 'chart-cell chartfont' + (special ? ' muted' : '');
+    const cls = 'chart-cell chartfont' + (special ? ' muted' : '') + (interactive ? ' tappable' : '');
     const subChords = special ? [displayText] : displayText.split(/\s+/).filter(Boolean);
     const inner = subChords.length > 1
       ? `<div class="chart-cell-multi${subChords.length>2?' stacked':''}">${subChords.map(c=>`<span>${escapeHtml(c)}</span>`).join('')}</div>`
       : escapeHtml(subChords[0] || '');
-    return `<div class="${cls}">${endingTag}${inner}</div>`;
+    const dataAttrs = interactive ? ` data-cell-section="${section.__idx}" data-cell-measure="${mi}"` : '';
+    return `<div class="${cls}"${dataAttrs}>${endingTag}${inner}</div>`;
   }).join('');
   const nameHtml = section.name ? `<span class="chart-name">${escapeHtml(section.name)}</span>` : '';
   const repeatTag = (section.repeat||0) > 1 ? `<span class="chart-repeat-tag">× ${section.repeat}</span>` : '';
