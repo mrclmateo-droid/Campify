@@ -224,6 +224,28 @@ nav#tabbar .brand{display:none;}
 .chart-dup-btn{border:1px solid var(--border); background:var(--bg-elev-2); color:var(--text-dim); border-radius:6px; width:28px; height:28px; font-size:14px; cursor:pointer; flex:none;}
 .chart-dup-btn:hover{color:var(--text); border-color:var(--text-faint);}
 .chart-section-actions{display:flex; gap:4px;}
+
+/* ---- Presentation-mode chart: real-book style ---- */
+.chart-section-perf{margin-bottom:26px;}
+.chart-rows-perf{display:flex; align-items:stretch; border-left:5px double var(--text); border-right:5px double var(--text);}
+.chart-rows-perf.repeated{box-shadow:inset 3px 0 0 var(--accent);}
+.chart-timesig-perf{
+  flex:none; width:22px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-weight:700; font-size:13px; line-height:1.3; padding:0 4px;
+}
+.chart-measures-perf-wrap{display:flex; flex-wrap:wrap; flex:1; border-top:1px solid var(--border-soft); border-bottom:1px solid var(--border-soft);}
+.chart-measure-perf{flex:1 1 88px; min-width:88px; position:relative; border-right:1px solid var(--border-soft);}
+.chart-measure-perf.muted{color:var(--text-faint);}
+.chart-measure-perf-cells{display:flex; height:100%; min-height:56px; position:relative;}
+.chart-slot-perf{display:flex; align-items:center; justify-content:center; font-size:19px; color:var(--accent); padding:10px 2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; position:relative; z-index:1;}
+.chart-tick-perf{position:absolute; top:8px; bottom:8px; width:1px; background:var(--border-soft); z-index:0;}
+.chart-tick-perf.sub{opacity:0.45;}
+.chart-slot-perf.holds{opacity:0.35; font-size:14px;}
+.chart-measure-perf.muted .chart-slot-perf{color:var(--text-faint); font-size:14px;}
+.ending-tag-perf{
+  position:absolute; top:-16px; left:0; right:0; font-size:10px; color:var(--text-dim);
+  border-top:1px solid var(--text-dim); padding-top:1px; text-align:center;
+}
 .chart-grid{display:grid; grid-template-columns:repeat(4,1fr); border-top:0.5px solid var(--border); border-left:0.5px solid var(--border);}
 .chart-cell{
   border-right:0.5px solid var(--border); border-bottom:0.5px solid var(--border);
@@ -1595,15 +1617,18 @@ function parseChartText(text){
 }
 // Header content can optionally end in "x2"/"×3" to mean "repeat this whole
 // section N times" (shown as a "× N" badge) — separate from "%", which only
-// repeats a single measure.
+// repeats a single measure. It can also end in a time signature like "3/4"
+// or "12/8" (checked first, since it sits after any "xN" in the text).
 function parseSectionHeader(inner){
-  let repeat = 0;
+  let repeat = 0, timeSig = '';
+  const tsMatch = inner.match(/^(.*?)\s*(\d{1,2}\/\d{1,2})\s*$/);
+  if(tsMatch){ inner = tsMatch[1].trim(); timeSig = tsMatch[2]; }
   const repMatch = inner.match(/^(.*?)\s*[x×]\s*(\d+)\s*$/i);
   if(repMatch){ inner = repMatch[1].trim(); repeat = parseInt(repMatch[2],10); }
   const colonIdx = inner.indexOf(':');
   const label = (colonIdx>=0 ? inner.slice(0,colonIdx) : inner).trim();
   const name = colonIdx>=0 ? inner.slice(colonIdx+1).trim() : '';
-  return { label: label || '?', name, repeat };
+  return { label: label || '?', name, repeat, timeSig };
 }
 function parseMeasureToken(tok){
   const m = tok.trim().match(/^(.*?)\((1|2)\)$/);
@@ -1616,7 +1641,7 @@ function measureToToken(m){
 function chartToText(chart){
   const sections = (chart && chart.sections) || [];
   return sections.map(s=>{
-    const header = '[' + s.label + (s.name ? ': '+s.name : '') + ((s.repeat||0)>1 ? ' x'+s.repeat : '') + ']';
+    const header = '[' + s.label + (s.name ? ': '+s.name : '') + ((s.repeat||0)>1 ? ' x'+s.repeat : '') + (s.timeSig ? ' '+s.timeSig : '') + ']';
     const rows = [];
     for(let i=0;i<s.measures.length;i+=4){
       rows.push(s.measures.slice(i,i+4).map(measureToToken).join(' | '));
@@ -1639,6 +1664,26 @@ document.getElementById('fChartText').addEventListener('input', updateChartPrevi
 // pass only does 1-for-1 character swaps so the cursor position stays put
 // while typing; the "final" pass (on blur) also collapses things like
 // accidental double sharps once the user is done with that line.
+// Jazz symbols (∆ ° ø, and "-" as minor) get translated to American
+// notation on the fly — CRO-Chords always stores/displays plain letters
+// and digits, never the jazz glyphs, no matter how they were typed in.
+function convertJazzSymbols(tok){
+  // Split root+accidental from the rest so we only touch the quality part.
+  const m = tok.match(/^([A-G])([#b]?)(.*)$/);
+  if(!m) return tok;
+  let [, root, acc, rest] = m;
+  rest = rest.replace(/\u25b2|\u0394/g, '\u2206'); // other triangle glyphs (▲, Greek Δ) -> canonical '∆'
+  if(/^\u2206/.test(rest)){                         // '∆' alone implies maj7; '∆9' etc keep their digits
+    rest = 'maj' + (rest.slice(1) || '7');
+  } else if(/^\u00f8/.test(rest)){                   // 'ø' (half-diminished) always implies the 7
+    rest = 'm7b5' + rest.slice(1).replace(/^7/, '');
+  } else if(/^\u00b0/.test(rest)){                   // '°' alone implies dim7; '°9' etc keep their digits
+    rest = 'dim' + (rest.slice(1) || '7');
+  } else if(/^-/.test(rest)){                        // '-' as a lead-sheet minor marker (e.g. "A-7")
+    rest = 'm' + rest.slice(1);
+  }
+  return root + acc + rest;
+}
 function normalizeChartLive(text){
   return text.split('\n').map(line=>{
     const trimmed = line.trim();
@@ -1647,6 +1692,7 @@ function normalizeChartLive(text){
       if(part==='|' || /^\s+$/.test(part) || !part) return part;
       let p = part.replace(/♯/g,'#').replace(/♭/g,'b');
       if(/^[a-g][a-zA-Z0-9#b().%]*$/.test(p)) p = p[0].toUpperCase() + p.slice(1);
+      if(/^[A-G]/.test(p)) p = convertJazzSymbols(p);
       return p;
     }).join('');
   }).join('\n');
@@ -2475,7 +2521,7 @@ function loadPresentSong(){
 function renderPresentContent(song){
   const semitones = (song.transpose || 0) - (song.capo || 0);
   if(ui.presentViewMode === 'chart'){
-    lyricsContent.innerHTML = renderChordChartHtml(song.chordChart, semitones, false) || '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
+    lyricsContent.innerHTML = renderChordChartHtmlPerf(song.chordChart, semitones) || '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
   } else {
     renderLyrics(song);
   }
@@ -2531,6 +2577,55 @@ function transposeMeasureText(text, semitones){
   if(!t || isMeasureSpecial(t) || semitones === 0) return t;
   return t.replace(/\S+/g, tok => isChordToken(tok) ? transposeToken(tok, semitones) : tok);
 }
+
+/* ---- beat subdivision (Presentation view only) ----
+   Quarter-note slots = the time signature's beat count for the common X/4
+   case; for X/8 compound meters (6/8, 9/8, 12/8) we group by the "felt"
+   pulse (each dotted-quarter = 3 eighths) since that's how those grooves are
+   actually counted, falling back to the raw eighth count otherwise.
+   Eighth-note slots are always exactly double that. */
+function timeSigSlots(ts){
+  const m = (ts||'4/4').match(/^(\d+)\/(\d+)$/);
+  const num = m ? parseInt(m[1],10) : 4;
+  const den = m ? parseInt(m[2],10) : 4;
+  let quarterSlots;
+  if(den === 8) quarterSlots = (num % 3 === 0) ? num/3 : num;
+  else quarterSlots = num;
+  return { quarterSlots: Math.max(1,quarterSlots), eighthSlots: Math.max(2,quarterSlots*2) };
+}
+// Spreads `n` chords across `total` slots as evenly as possible, each chord
+// getting a contiguous run of slots (any remainder goes to the earliest
+// chords) — this is the "you typed fewer chords than beats" fallback.
+function distributeEvenSlots(n, total){
+  const base = Math.floor(total/n), extra = total % n;
+  const spans = [];
+  for(let i=0;i<n;i++) spans.push(base + (i<extra?1:0));
+  return spans;
+}
+// Turns one measure's chord text into an array of {text, span, holds} slot
+// cells ready to render: holds=true means "sustained from the previous
+// cell", so it displays faint and skips its own chord label. Also reports
+// whether eighth-note resolution kicked in, so the renderer knows which
+// internal dividers are real beat boundaries (solid) vs mid-beat (dotted).
+function measureToSlots(measure, semitones, quarterSlots, eighthSlots){
+  const displayText = transposeMeasureText(measure.text, semitones);
+  if(isMeasureSpecial(measure.text)){
+    return { slots: [{ text: displayText, span: quarterSlots, holds:false }], eighthMode:false };
+  }
+  const chords = displayText.split(/\s+/).filter(Boolean);
+  if(!chords.length) return { slots: [{ text:'', span: quarterSlots, holds:false }], eighthMode:false };
+  if(chords.length <= quarterSlots){
+    // Proportional: e.g. 2 chords in a 4/4 bar each take half the bar.
+    const spans = distributeEvenSlots(chords.length, quarterSlots);
+    return { slots: chords.map((c,i)=>({ text:c, span: spans[i], holds:false })), eighthMode:false };
+  }
+  // 5+ chords: switch to eighth-note resolution, one chord per slot, and the
+  // last chord written holds through any slots left over.
+  const capped = chords.slice(0, eighthSlots);
+  const slots = capped.map(c=>({ text:c, span:1, holds:false }));
+  while(slots.length < eighthSlots) slots.push({ text: capped[capped.length-1], span:1, holds:true });
+  return { slots, eighthMode:true };
+}
 function chartSectionHtml(section, interactive){
   const measuresHtml = (section.measures||[]).map(m=>{
     const displayText = transposeMeasureText(m.text, section.__semitones || 0);
@@ -2561,6 +2656,58 @@ function renderChordChartHtml(chart, semitones, interactive){
   const sections = (chart && chart.sections) || [];
   if(!sections.length) return '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
   return sections.map((s,i)=>{ s.__semitones = semitones; s.__idx = i; return chartSectionHtml(s, interactive); }).join('');
+}
+
+/* ---- Presentation-only renderer: real-book style (thin bars, double
+   barlines at section edges, beat subdivisions) instead of the boxed grid
+   the Editor uses — the grid is great for typing, but a live performer
+   reading at a glance benefits more from the leaner, denser look. */
+function chartMeasurePerfHtml(measure, semitones, quarterSlots, eighthSlots){
+  const { slots, eighthMode } = measureToSlots(measure, semitones, quarterSlots, eighthSlots);
+  const endingTag = measure.ending ? `<span class="ending-tag-perf">${escapeHtml(measure.ending)}.</span>` : '';
+  const special = isMeasureSpecial(measure.text);
+  // Reference tick marks always show the full beat grid, independent of how
+  // many chords are actually written — a single chord filling the whole bar
+  // still shows where beats 2/3/4 would fall, matching a real chart's feel.
+  const totalTicks = eighthMode ? eighthSlots : quarterSlots;
+  const ticksHtml = special ? '' : Array.from({length: totalTicks-1}, (_,i)=>{
+    const pos = ((i+1)/totalTicks)*100;
+    const isBeatTick = eighthMode ? ((i+1) % 2 === 0) : true;
+    return `<div class="chart-tick-perf${isBeatTick?'':' sub'}" style="left:${pos}%;"></div>`;
+  }).join('');
+  const cellsHtml = slots.map(slot=>{
+    const cls = 'chart-slot-perf' + (slot.holds ? ' holds' : '');
+    const label = slot.holds ? '–' : escapeHtml(slot.text);
+    return `<div class="${cls}" style="flex:${slot.span} 1 0;">${label}</div>`;
+  }).join('');
+  return `<div class="chart-measure-perf${special?' muted':''}">${endingTag}<div class="chart-measure-perf-cells chartfont">${ticksHtml}${cellsHtml}</div></div>`;
+}
+function chartSectionHtmlPerf(section){
+  const semitones = section.__semitones || 0;
+  const { quarterSlots, eighthSlots } = timeSigSlots(section.timeSig);
+  const measures = section.measures || [];
+  const measuresHtml = measures.map(m=>chartMeasurePerfHtml(m, semitones, quarterSlots, eighthSlots)).join('');
+  const [tsNum, tsDen] = (section.timeSig || '4/4').split('/');
+  const nameHtml = section.name ? `<span class="chart-name">${escapeHtml(section.name)}</span>` : '';
+  const repeatTag = (section.repeat||0) > 1 ? `<span class="chart-repeat-tag">× ${section.repeat}</span>` : '';
+  const repClass = (section.repeat||0) > 1 ? ' repeated' : '';
+  return `
+    <div class="chart-section-perf">
+      <div class="chart-section-head">
+        <span class="chart-badge">${escapeHtml(section.label||'?')}</span>
+        ${nameHtml}
+        ${repeatTag}
+      </div>
+      <div class="chart-rows-perf${repClass}">
+        <div class="chart-timesig-perf"><span>${escapeHtml(tsNum)}</span><span>${escapeHtml(tsDen)}</span></div>
+        <div class="chart-measures-perf-wrap">${measuresHtml}</div>
+      </div>
+    </div>`;
+}
+function renderChordChartHtmlPerf(chart, semitones){
+  const sections = (chart && chart.sections) || [];
+  if(!sections.length) return '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
+  return sections.map(s=>{ s.__semitones = semitones; return chartSectionHtmlPerf(s); }).join('');
 }
 
 function renderLyrics(song){
@@ -2898,6 +3045,29 @@ function pdfNormalizeChordText(s){ return s.replace(/\u266d/g,'b').replace(/\u26
 function pdfIsChordTok(t){ return PDF_CHORD_RE.test(t); }
 function pdfIsChordRow(toks){ return toks.length>0 && toks.every(pdfIsChordTok); }
 function pdfMedian(arr){ const s=[...arr].sort((a,b)=>a-b); return s.length ? s[Math.floor(s.length/2)] : 7; }
+// Different chord-chart apps export at different font sizes (14pt worked for
+// the PDF this was first built against, but that's just one app's choice,
+// not a standard) — so the body size is detected per page instead of
+// hardcoded: the most common size in a normal reading-text range, ignoring
+// tiny footers/page-numbers and the large title.
+function pdfDetectBodySize(words){
+  const counts = {};
+  words.forEach(w=>{
+    const s = Math.round(w.size);
+    if(s <= 7 || s >= 18) return;
+    counts[s] = (counts[s]||0) + 1;
+  });
+  let best = null, bestCount = 0;
+  Object.entries(counts).forEach(([s,c])=>{ if(c>bestCount){ bestCount=c; best=Number(s); } });
+  return best || 14;
+}
+// A page of chord-diagram fingering charts (common as a "cheat sheet" page
+// some apps prepend) has rows made entirely of chord names and fret/finger
+// digits — never real prose. Used to skip those pages rather than trying to
+// read them as if they were a lyrics+chords page.
+function pdfRowHasProse(rowWords){
+  return rowWords.some(w => !pdfIsChordTok(w.text) && /[a-zA-ZáéíóúñÁÉÍÓÚÑ]{2,}/.test(w.text));
+}
 // Some chord-chart PDFs emit a chord's sharp/flat sign as its own separate
 // positioned text fragment (e.g. "C", "#", "m7" instead of one "C#m7" piece).
 // Re-glue those: a lone accidental symbol always merges with its neighbor
@@ -2938,15 +3108,24 @@ function pdfExtractChordChart(pages){
       .map(w => ({ text: pdfNormalizeChordText(w.str), x0:w.x0, x1:w.x1, top:w.top, size:w.size }));
 
     if(pnum===0){
-      const titleWords = words.filter(w=>Math.round(w.size)===20).sort((a,b)=>a.x0-b.x0);
+      const topWords = words.filter(w=>w.top < 60 && Math.round(w.size) > 8);
+      const titleSize = topWords.length ? Math.max(...topWords.map(w=>Math.round(w.size))) : 20;
+      const titleWords = words.filter(w=>Math.round(w.size)===titleSize).sort((a,b)=>a.x0-b.x0);
       headerTitle = titleWords.map(w=>w.text).join(' ');
-      const ktWords = words.filter(w=>Math.round(w.size)===10).sort((a,b)=>a.x0-b.x0);
-      keyTempoLine = ktWords.map(w=>w.text).join(' ');
+      // Look for "Key: X  Tempo: Y" by CONTENT/POSITION rather than a
+      // guessed font size — different apps render this line at very
+      // different sizes (10pt in one export, 6pt in another). It sits in
+      // the gap just below the title, before the actual song body starts.
+      const titleBottom = topWords.length ? Math.max(...topWords.map(w=>w.top)) + titleSize : 60;
+      const smallTopWords = words.filter(w=> w.top > titleBottom && w.top < titleBottom+40)
+        .sort((a,b)=> a.top-b.top || a.x0-b.x0);
+      keyTempoLine = smallTopWords.map(w=>w.text).join(' ');
     }
 
-    const tinyTops = words.filter(w=>w.size<=8.5).map(w=>w.top);
+    const tinyTops = words.filter(w=>w.size<=8.5 && w.top<150).map(w=>w.top);
     const bodyStart = tinyTops.length ? Math.max(...tinyTops)+8 : -1;
-    const bodyWords = words.filter(w=>Math.round(w.size)===14 && w.top>=bodyStart);
+    const bodySize = pdfDetectBodySize(words);
+    const bodyWords = words.filter(w=>Math.round(w.size)===bodySize && w.top>=bodyStart);
     if(!bodyWords.length) return;
 
     const widths = bodyWords.map(w=>(w.x1-w.x0)/Math.max(w.text.length,1));
@@ -2963,6 +3142,10 @@ function pdfExtractChordChart(pages){
       }
     });
     rows.forEach(r=>{ r.words = pdfCoalesceRowWords(r.words, avgCharW); });
+
+    // A page with no real lyric line at all (every row is chord names and/or
+    // digits) is a diagram/legend page some apps prepend, not song content.
+    if(!rows.some(r=>pdfRowHasProse(r.words))) return;
 
     const col = x => Math.round((x-minX)/avgCharW);
     const buildLine = rowWords => {
