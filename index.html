@@ -186,10 +186,10 @@ nav#tabbar .brand{display:none;}
 .empty .big{font-size:15px; color:var(--text); margin-bottom:6px; font-weight:600;}
 
 /* ---- fullscreen chord chart editor ---- */
-#chartEditorScreen, #lyricsEditorScreen{
+#chartEditorScreen, #lyricsEditorScreen, #pdfExportScreen{
   position:fixed; inset:0; z-index:140; background:var(--bg); display:flex; flex-direction:column;
 }
-#chartEditorScreen.hidden, #lyricsEditorScreen.hidden{display:none;}
+#chartEditorScreen.hidden, #lyricsEditorScreen.hidden, #pdfExportScreen.hidden{display:none;}
 .chart-editor-bar{
   display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border);
   padding-top:calc(10px + env(safe-area-inset-top)); flex:none; overflow-x:auto;
@@ -508,6 +508,28 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
 @media (prefers-reduced-motion: reduce){
   *{transition-duration:.001ms !important; animation-duration:.001ms !important;}
 }
+/* ---- PDF export via the browser's native print/"save as PDF" — reuses the
+   real chart/lyrics renderers as-is, just overriding the color variables to
+   dark-on-white for paper instead of duplicating all that CSS. ---- */
+#printArea{display:none;}
+@media print{
+  html, body{background:#fff !important;}
+  body > *:not(#printArea){display:none !important;}
+  #printArea, #printArea *{
+    color:#000 !important; background:transparent !important; border-color:#999 !important;
+  }
+  #printArea{
+    display:block !important; position:static; background:#fff !important;
+    padding:0; margin:0;
+  }
+  #printArea .print-header{text-align:center; margin-bottom:18px;}
+  #printArea .print-header h1{font-size:22px; margin:0 0 4px;}
+  #printArea .print-meta{font-size:13px; color:#333 !important;}
+  #printArea #printLyrics{
+    font-family:var(--font-mono); white-space:pre-wrap; font-size:13px; line-height:1.6;
+  }
+  #printArea .chart-badge{background:#000 !important; color:#fff !important;}
+}
 </style>
 </head>
 <body data-theme="dark">
@@ -559,8 +581,12 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           <button class="btn" id="btnImportPdfPlaylist" title="Importar un PDF con varias canciones (cancionero/playlist de iReal Pro)">
             <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><rect x="8" y="12" width="8" height="2" rx="0.5"/><rect x="8" y="16" width="8" height="2" rx="0.5"/></svg> Varias canciones
           </button>
+          <button class="btn" id="btnImportPdfGrid" title="Importar un PDF de tabla de acordes por compás numerado (ej. Chord ai)">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><rect x="7" y="11" width="4" height="4"/><rect x="13" y="11" width="4" height="4"/></svg> Tabla numerada
+          </button>
           <input type="file" id="filePdfImport" accept="application/pdf" class="hidden">
           <input type="file" id="filePdfPlaylistImport" accept="application/pdf" class="hidden">
+          <input type="file" id="filePdfGridImport" accept="application/pdf" class="hidden">
         </div>
       </div>
       <div class="search">
@@ -582,6 +608,12 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           <option value="80-109">80–109 BPM</option>
           <option value="110-139">110–139 BPM</option>
           <option value="140-999">140+ BPM</option>
+        </select>
+        <select id="libFilterContent">
+          <option value="">Con letra o tabla</option>
+          <option value="lyrics">Solo con letra</option>
+          <option value="chart">Solo con tabla de acordes</option>
+          <option value="both">Con letra y tabla</option>
         </select>
       </div>
       <div id="songGrid" class="song-grid"></div>
@@ -625,6 +657,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <button class="btn" id="btnEdDuplicate"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Duplicar</button>
         <button class="btn" id="btnReharmonize" title="Crea una copia con séptimas diatónicas según la tonalidad"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg> Reharmonizar</button>
         <button class="btn" id="btnShowChords" title="Ver diagramas de los acordes de esta canción"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M3 10h18"/></svg> Ver acordes</button>
+        <button class="btn" id="btnExportPdfEditor" title="Exportar esta canción como PDF"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg> Exportar PDF</button>
         <button class="btn danger" id="btnEdDelete"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg> Eliminar</button>
         <button class="btn ghost" id="btnEdCancel">Cancelar edición</button>
       </div>
@@ -768,6 +801,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
     </div>
     <div class="metro-dot" id="metroDot"></div>
     <button class="btn icon ghost" id="btnEditFromPresent" title="Editar esta canción"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+    <button class="btn icon ghost" id="btnExportPdfPresent" title="Exportar esta canción como PDF"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg></button>
     <button class="btn icon ghost" id="btnStageMode" title="Modo escenario"><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.3L18.5 21 12 16.5 5.5 21l2-7.7L2 9h7z"/></svg></button>
   </div>
 
@@ -813,6 +847,21 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
 </div>
 
 <!-- ============ FULLSCREEN SINGLE-MEASURE (CELL) EDITOR ============ -->
+<!-- ============ PDF EXPORT (print preview) ============ -->
+<div id="pdfExportScreen" class="hidden">
+  <div class="chart-editor-bar">
+    <button class="btn icon ghost" id="btnClosePdfExport" title="Volver"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div style="flex:1; min-width:0;">
+      <div style="font-size:15px; font-weight:650;">Vista previa PDF</div>
+      <div style="font-size:12px; color:var(--text-dim);" id="pdfExportSongTitle"></div>
+    </div>
+    <button class="btn small primary" id="btnPrintPdf">Imprimir / Guardar PDF</button>
+  </div>
+  <div class="chart-editor-body">
+    <div class="chart-editor-pane" id="pdfExportContent" style="flex:1;"></div>
+  </div>
+</div>
+
 <!-- ============ FULLSCREEN LYRICS + CHORDS EDITOR ============ -->
 <div id="lyricsEditorScreen" class="hidden">
   <div class="chart-editor-bar">
@@ -903,6 +952,17 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
 <!-- ============ GENERIC MODAL SHEET ============ -->
 <div id="overlay" class="overlay hidden">
   <div class="sheet" id="sheetBody"></div>
+</div>
+
+<!-- PDF export target: hidden in normal use, shown (and everything else
+     hidden) only while the browser's print dialog is open. -->
+<div id="printArea">
+  <div class="print-header">
+    <h1 id="printTitle"></h1>
+    <div class="print-meta" id="printMeta"></div>
+  </div>
+  <div id="printLyrics"></div>
+  <div id="printChart"></div>
 </div>
 
 <!-- PDF.js: used only for the "Importar PDF" feature (reads chord charts exported from apps like Chord.ai) -->
@@ -1560,7 +1620,11 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
 /* ============================================================
    LIBRARY VIEW
    ============================================================ */
-const libState = { query:'', sort:'alpha', artist:'', key:'', bpm:'' };
+const libState = { query:'', sort:'alpha', artist:'', key:'', bpm:'', content:'' };
+function songHasLyrics(s){ return !!(s.lyrics && s.lyrics.trim()); }
+function songHasChart(s){
+  return !!(s.chordChart && s.chordChart.sections && s.chordChart.sections.some(sec => sec.measures && sec.measures.length));
+}
 
 function populateLibFilters(){
   const artists = [...new Set(state.songs.map(s=>s.artist).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
@@ -1584,6 +1648,15 @@ function filteredSongs(){
   if(libState.bpm){
     const [lo,hi] = libState.bpm.split('-').map(Number);
     list = list.filter(s => (s.bpm||0) >= lo && (s.bpm||0) <= hi);
+  }
+  if(libState.content){
+    list = list.filter(s=>{
+      const hasLyrics = songHasLyrics(s), hasChart = songHasChart(s);
+      if(libState.content==='lyrics') return hasLyrics;
+      if(libState.content==='chart') return hasChart;
+      if(libState.content==='both') return hasLyrics && hasChart;
+      return true;
+    });
   }
   switch(libState.sort){
     case 'artist': list.sort((a,b)=> (a.artist||'').localeCompare(b.artist||'') || a.title.localeCompare(b.title)); break;
@@ -1654,6 +1727,7 @@ document.getElementById('libSort').addEventListener('change', e=>{ libState.sort
 document.getElementById('libFilterArtist').addEventListener('change', e=>{ libState.artist = e.target.value; renderLibrary(); });
 document.getElementById('libFilterKey').addEventListener('change', e=>{ libState.key = e.target.value; renderLibrary(); });
 document.getElementById('libFilterBpm').addEventListener('change', e=>{ libState.bpm = e.target.value; renderLibrary(); });
+document.getElementById('libFilterContent').addEventListener('change', e=>{ libState.content = e.target.value; renderLibrary(); });
 document.getElementById('btnNewFromLib').addEventListener('click', ()=>{ newSong(); switchView('editor'); });
 
 /* ============================================================
@@ -2808,6 +2882,42 @@ function openPresent(songId, tracklistId){
   setupMetronome();
 }
 
+/* ---- PDF export (single song): populates the hidden #printArea with the
+   same rendering functions used on-screen, then hands off to the browser's
+   native print dialog — "Save as PDF" from there needs no library, no
+   internet, and matches exactly what a printed reference should look like. ---- */
+function exportSongToPdf(song){
+  if(!song) return;
+  document.getElementById('printTitle').textContent = song.title || 'Sin título';
+  const metaParts = [];
+  if(song.artist) metaParts.push(song.artist);
+  if(song.key) metaParts.push('Tonalidad: ' + song.key);
+  if(song.bpm) metaParts.push(song.bpm + ' BPM');
+  if(song.capo) metaParts.push('Capo ' + song.capo);
+  document.getElementById('printMeta').textContent = metaParts.join(' · ');
+
+  const semitones = (song.transpose||0) - (song.capo||0);
+  document.getElementById('printLyrics').innerHTML = songHasLyrics(song)
+    ? chordHtmlForLyrics(song.lyrics, semitones) : '';
+  document.getElementById('printChart').innerHTML = songHasChart(song)
+    ? renderChordChartHtml(song.chordChart, semitones, false) : '';
+
+  if(!songHasLyrics(song) && !songHasChart(song)){
+    toast('Esta canción no tiene letra ni tabla de acordes para exportar');
+    return;
+  }
+  setTimeout(()=>window.print(), 50); // let the DOM paint before opening the print dialog
+}
+document.getElementById('btnExportPdfEditor').addEventListener('click', ()=>{
+  if(!ui.editingSongId){ toast('Guarda la canción primero'); return; }
+  const s = state.songs.find(x=>x.id===ui.editingSongId);
+  if(s) exportSongToPdf(s);
+});
+document.getElementById('btnExportPdfPresent').addEventListener('click', ()=>{
+  const s = currentPresentSong();
+  if(s) exportSongToPdf(s);
+});
+
 function currentPresentSong(){
   const id = ui.presentQueue[ui.presentIndex];
   return state.songs.find(s=>s.id===id);
@@ -3834,6 +3944,69 @@ async function pdfPlaylistToSongs(file){
   return songs;
 }
 
+/* ============================================================
+   MEASURE-GRID PDF IMPORT (Chord.ai "roman numeral analysis" export)
+   Numbered-row format: each row = one measure, up to 4 beat columns —
+   maps directly onto our own chart's beat-slot model. Verified against
+   the real PDF page-by-page; the one real bug found (measure numbers
+   switching to a smaller font once they hit 3 digits) is why the size
+   filter below is a range, not an exact match.
+   ============================================================ */
+async function pdfMeasureGridToChordChart(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  const allMeasures = []; // {num, chords:[str,...]}
+  let title = '?', key = '', bpm = null;
+
+  for(let pnum=1; pnum<=pdf.numPages; pnum++){
+    const page = await pdf.getPage(pnum);
+    const viewport = page.getViewport({scale:1});
+    const content = await page.getTextContent();
+    const words = [];
+    content.items.forEach(item=>{
+      if(!item.str || !item.str.trim()) return;
+      const tx = item.transform;
+      const fontSize = Math.sqrt(tx[2]*tx[2] + tx[3]*tx[3]);
+      words.push({ text:item.str.trim(), x0:tx[4], top:viewport.height - tx[5], size:fontSize });
+    });
+
+    if(pnum === 1){
+      const titleWords = words.filter(w => w.size >= 18);
+      title = titleWords.map(w=>w.text).join(' ').trim() || '?';
+      const headerLine = words.filter(w=>w.top < 110).map(w=>w.text).join(' ');
+      const keyM = headerLine.match(/Key:\s*(\S+)/);
+      const bpmM = headerLine.match(/(\d+)\s*BPM/);
+      if(keyM) key = keyM[1];
+      if(bpmM) bpm = parseInt(bpmM[1], 10);
+    }
+
+    // Measure numbers sit at the far left; font size shrinks once numbers
+    // hit 3 digits (a real layout quirk this file has), so the filter is a
+    // range rather than one exact size.
+    const nums = words.filter(w => w.x0 < 50 && w.size < 12 && /^\d+$/.test(w.text)).sort((a,b)=>a.top-b.top);
+    // Chord text (not the roman-numeral function label below it, which is
+    // smaller) sits at one of ~4 fixed x-columns, one per beat.
+    const chordWords = words.filter(w => Math.abs(w.size - 14) < 0.5);
+
+    nums.forEach((numw, i) => {
+      const topStart = i>0 ? (nums[i-1].top + numw.top)/2 : numw.top - 40;
+      const topEnd = i+1<nums.length ? (numw.top + nums[i+1].top)/2 : numw.top + 60;
+      const rowChords = chordWords
+        .filter(w => w.top >= topStart && w.top < topEnd && w.text !== '-')
+        .sort((a,b)=>a.x0-b.x0)
+        .map(w=>w.text);
+      allMeasures.push({ num: parseInt(numw.text,10), chords: rowChords });
+    });
+  }
+
+  allMeasures.sort((a,b)=>a.num-b.num);
+  const measures = allMeasures.map((m,i) => ({
+    text: m.chords.length ? m.chords.join(' ') : (i===0 ? 'N.C.' : '%'),
+    ending: null
+  }));
+  return { title, key, bpm, sections: [{ label:'A', name:'', repeat:0, measures }] };
+}
+
 let pdfPlaylistPending = [];
 function openPdfPlaylistReview(songs){
   pdfPlaylistPending = songs.map(s => ({ ...s, include: true }));
@@ -3874,7 +4047,7 @@ function renderPdfPlaylistReview(){
     const toImport = pdfPlaylistPending.filter(s => s.include);
     toImport.forEach(s=>{
       state.songs.push({
-        id: uid(), title: s.title, artist: s.artist || '', bpm: 100, key: '',
+        id: uid(), title: s.title, artist: s.artist || '', bpm: s.bpm || 100, key: s.key || '',
         notes: s.notes ? 'Importado de un PDF con varias canciones. ' + s.notes : 'Importado de un PDF con varias canciones.',
         lyrics: '', chordChart: { sections: s.sections }, transpose: 0, capo: 0, updatedAt: todayISO()
       });
@@ -3907,6 +4080,32 @@ document.getElementById('filePdfPlaylistImport').addEventListener('change', asyn
     openPdfPlaylistReview(songs);
   }catch(err){
     console.error('Error al leer el PDF de varias canciones:', err);
+    toast('No se pudo leer este PDF. Puede que esté protegido, dañado, o en un formato distinto.');
+  }
+});
+
+document.getElementById('btnImportPdfGrid').addEventListener('click', ()=>{
+  if(typeof pdfjsLib === 'undefined'){
+    toast('No se pudo cargar el lector de PDF — revisa tu conexión a internet e intenta de nuevo');
+    return;
+  }
+  document.getElementById('filePdfGridImport').click();
+});
+document.getElementById('filePdfGridImport').addEventListener('change', async e=>{
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  toast('Leyendo PDF…');
+  try{
+    const song = await pdfMeasureGridToChordChart(file);
+    const totalMeasures = song.sections.reduce((sum,s)=>sum+s.measures.length, 0);
+    if(!totalMeasures){
+      toast('No se reconoció ninguna tabla en este PDF. ¿Es del formato de compás numerado?');
+      return;
+    }
+    openPdfPlaylistReview([{ title: song.title, artist: '', key: song.key, bpm: song.bpm, sections: song.sections, notes: '' }]);
+  }catch(err){
+    console.error('Error al leer el PDF de tabla numerada:', err);
     toast('No se pudo leer este PDF. Puede que esté protegido, dañado, o en un formato distinto.');
   }
 });
