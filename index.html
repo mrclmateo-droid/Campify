@@ -186,11 +186,10 @@ nav#tabbar .brand{display:none;}
 .empty .big{font-size:15px; color:var(--text); margin-bottom:6px; font-weight:600;}
 
 /* ---- fullscreen chord chart editor ---- */
-#chartEditorScreen, #lyricsEditorScreen, #cellEditorScreen{
+#chartEditorScreen, #lyricsEditorScreen{
   position:fixed; inset:0; z-index:140; background:var(--bg); display:flex; flex-direction:column;
 }
-#cellEditorScreen{z-index:150;} /* opens ON TOP of the chart editor, so it needs to win the stack */
-#chartEditorScreen.hidden, #lyricsEditorScreen.hidden, #cellEditorScreen.hidden{display:none;}
+#chartEditorScreen.hidden, #lyricsEditorScreen.hidden{display:none;}
 .chart-editor-bar{
   display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border);
   padding-top:calc(10px + env(safe-area-inset-top)); flex:none; overflow-x:auto;
@@ -209,37 +208,49 @@ nav#tabbar .brand{display:none;}
   font-family:var(--font-mono); line-height:1.7; white-space:pre; color:var(--text); resize:none;
 }
 
-/* ---- single-measure cell editor ---- */
-.cell-editor-body{flex:1; min-height:0; overflow-y:auto; padding:18px 16px; display:flex; flex-direction:column; gap:18px;}
-.cell-editor-preview{
-  background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius);
-  min-height:70px; display:flex; align-items:center; justify-content:center; font-size:28px; color:var(--accent);
-  padding:10px;
+/* ---- in-place cell editing: sticky bottom bar + sliding symbol sheet ----
+   Both live inside one docked container so the sheet always stacks ABOVE
+   the bar (never covers it) — Listo/Eliminar/ending stay reachable the
+   whole time the symbol keyboard is open. */
+#cellEditDock{
+  position:fixed; left:0; right:0; bottom:0; z-index:145;
+  display:flex; flex-direction:column;
+}
+#cellEditDock.hidden{display:none;}
+.cell-edit-bar{
+  display:flex; align-items:center; gap:8px; padding:10px 12px;
+  padding-bottom:calc(10px + env(safe-area-inset-bottom));
+  background:var(--bg-elev); border-top:1px solid var(--border); flex:none;
 }
 #cellEditorInput{
-  background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius);
-  padding:12px; color:var(--text); width:100%;
+  flex:1; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius);
+  padding:11px 12px; color:var(--text); font-family:var(--font-mono); font-size:17px;
 }
 #cellEditorInput:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent);}
 .cell-editor-label{font-size:11px; color:var(--text-dim); font-weight:600; letter-spacing:.02em; text-transform:uppercase;}
-.cell-editor-endings{display:flex; flex-direction:column; gap:8px;}
-.cell-editor-ending-btns{display:flex; gap:8px;}
+.cell-editor-ending-btns{display:flex; gap:8px; flex:1;}
 .cell-editor-ending-btns .btn.active{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
-.cell-editor-palette{display:flex; flex-direction:column; gap:14px;}
+.cell-palette-sheet{
+  max-height:56vh; overflow-y:auto; flex:none;
+  background:var(--bg-elev); border-top:1px solid var(--border);
+  padding:8px 16px 16px;
+  display:flex; flex-direction:column; gap:14px;
+}
+.cell-palette-sheet.hidden{display:none;}
+.cell-palette-sheet-handle{width:36px; height:4px; background:var(--border); border-radius:2px; margin:2px auto 0;}
+.cell-palette-topRow{display:flex; align-items:center; gap:10px;}
+.cell-editor-palette{display:flex; flex-direction:column; gap:12px;}
 .palette-row{display:flex; flex-direction:column; gap:6px;}
 .palette-btns{display:flex; flex-wrap:wrap; gap:6px;}
 .palette-btn{
-  background:var(--bg-elev); border:1px solid var(--border); border-radius:8px; color:var(--text);
+  background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text);
   font-family:var(--font-mono); font-size:14px; font-weight:700; padding:8px 10px; cursor:pointer; min-width:40px;
 }
 .palette-btn:active{background:var(--bg-elev-2);}
 .palette-btn.special{font-family:inherit; font-weight:600; font-size:12px;}
 .cell-editor-actions{display:flex; gap:8px; padding-top:4px; border-top:1px solid var(--border);}
 .cell-editor-actions .btn{flex:1;}
-@media(min-width:880px){
-  .chart-editor-body{flex-direction:row;}
-  .chart-editor-pane.preview{border-top:0; border-left:1px solid var(--border);}
-}
+.chart-cell.active-edit{outline:2px solid var(--accent); outline-offset:-2px; background:var(--bg-elev-2);}
 
 /* ---- chord diagram glossary ---- */
 .chord-diagram-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(80px,1fr)); gap:14px; margin:12px 0;}
@@ -798,55 +809,6 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
 </div>
 
 <!-- ============ FULLSCREEN SINGLE-MEASURE (CELL) EDITOR ============ -->
-<div id="cellEditorScreen" class="hidden">
-  <div class="chart-editor-bar">
-    <button class="btn icon ghost" id="btnCloseCellEditor" title="Volver"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
-    <div style="flex:1; min-width:0;">
-      <div style="font-size:15px; font-weight:650;">Editar compás</div>
-      <div style="font-size:12px; color:var(--text-dim);" id="cellEditorContext"></div>
-    </div>
-    <button class="btn small danger" id="btnCellDelete">Eliminar</button>
-    <button class="btn small primary" id="btnCellSave">Listo</button>
-  </div>
-  <div class="cell-editor-body">
-    <div class="cell-editor-preview chartfont" id="cellEditorPreview"></div>
-    <input type="text" id="cellEditorInput" spellcheck="false" placeholder="Am Dm" style="font-family:var(--font-mono); font-size:22px; text-align:center;">
-
-    <div class="cell-editor-endings">
-      <span class="cell-editor-label">Final de repetición</span>
-      <div class="cell-editor-ending-btns">
-        <button type="button" class="btn small" id="btnCellEndNone">Ninguno</button>
-        <button type="button" class="btn small" id="btnCellEnd1">1.</button>
-        <button type="button" class="btn small" id="btnCellEnd2">2.</button>
-      </div>
-    </div>
-
-    <div class="cell-editor-palette">
-      <div class="palette-row">
-        <span class="cell-editor-label">Notas</span>
-        <div class="palette-btns" id="paletteNotes"></div>
-      </div>
-      <div class="palette-row">
-        <span class="cell-editor-label">Calidad</span>
-        <div class="palette-btns" id="paletteQuality"></div>
-      </div>
-      <div class="palette-row">
-        <span class="cell-editor-label">Bajo</span>
-        <div class="palette-btns" id="paletteBass"></div>
-      </div>
-      <div class="palette-row">
-        <span class="cell-editor-label">Especial</span>
-        <div class="palette-btns" id="paletteSpecial"></div>
-      </div>
-    </div>
-
-    <div class="cell-editor-actions">
-      <button type="button" class="btn" id="btnCellInsertBefore">+ Compás antes</button>
-      <button type="button" class="btn" id="btnCellInsertAfter">+ Compás después</button>
-    </div>
-  </div>
-</div>
-
 <!-- ============ FULLSCREEN LYRICS + CHORDS EDITOR ============ -->
 <div id="lyricsEditorScreen" class="hidden">
   <div class="chart-editor-bar">
@@ -861,24 +823,75 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
   </div>
 </div>
 
-<!-- ============ FULLSCREEN CHORD CHART EDITOR ============ -->
+<!-- ============ FULLSCREEN CHORD CHART EDITOR ============
+     Grid view is the default full-screen surface — tap any cell to edit it
+     in place. "Texto" swaps to raw-text entry for fast bulk typing; both
+     views read/write the same underlying #fChartText. The symbol palette
+     lives in a bottom sheet that slides up like a custom keyboard, so
+     editing a cell never leaves this screen. ============ -->
 <div id="chartEditorScreen" class="hidden">
   <div class="chart-editor-bar">
     <button class="btn icon ghost" id="btnCloseChartEditor" title="Volver"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
-    <div style="flex:1; min-width:0;">
-      <div style="font-size:15px; font-weight:650;">Tabla de acordes</div>
-      <div style="font-size:12px; color:var(--text-dim);" id="chartEditorSongTitle"></div>
+    <div style="flex:1; min-width:70px;">
+      <div style="font-size:15px; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Tabla de acordes</div>
+      <div style="font-size:12px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" id="chartEditorSongTitle"></div>
     </div>
-    <button class="btn small" id="btnGenerateChart" title="Generar desde la letra">Desde la letra</button>
-    <button class="btn small" id="btnChartTemplates" title="Insertar una progresión común">Plantillas</button>
-    <button class="btn small" id="btnChartHelp" title="Ayuda">?</button>
+    <div style="display:flex; gap:8px; overflow-x:auto; flex:none;">
+      <button class="btn small" id="btnChartModeToggle" title="Escribir como texto">Texto</button>
+      <button class="btn small" id="btnGenerateChart" title="Generar desde la letra">Desde la letra</button>
+      <button class="btn small" id="btnChartTemplates" title="Insertar una progresión común">Plantillas</button>
+      <button class="btn small" id="btnChartHelp" title="Ayuda">?</button>
+    </div>
   </div>
-  <div class="chart-editor-body">
-    <div class="chart-editor-pane">
+  <div class="chart-editor-body" id="chartGridBody">
+    <div class="chart-editor-pane" style="flex:1;">
+      <div id="chartPreviewFull"></div>
+    </div>
+  </div>
+  <div class="chart-editor-body hidden" id="chartTextBody">
+    <div class="chart-editor-pane" style="flex:1;">
       <textarea id="fChartText" spellcheck="false" placeholder="[A]&#10;C | CM7 | C7 | F&#10;Fm6 | C | D7 | CM7(1)&#10;C(2)&#10;&#10;[B: Melo]&#10;Dm | G | C | %"></textarea>
     </div>
-    <div class="chart-editor-pane preview">
-      <div id="chartPreviewFull"></div>
+  </div>
+
+  <div id="cellEditDock" class="hidden">
+    <div class="cell-palette-sheet hidden" id="cellPaletteSheet">
+      <div class="cell-palette-sheet-handle"></div>
+      <div class="cell-palette-topRow">
+        <div class="cell-editor-ending-btns">
+          <button type="button" class="btn small" id="btnCellEndNone">Sin final</button>
+          <button type="button" class="btn small" id="btnCellEnd1">1.</button>
+          <button type="button" class="btn small" id="btnCellEnd2">2.</button>
+        </div>
+        <button type="button" class="btn small danger" id="btnCellDelete">Eliminar compás</button>
+      </div>
+      <div class="cell-editor-palette">
+        <div class="palette-row">
+          <span class="cell-editor-label">Notas</span>
+          <div class="palette-btns" id="paletteNotes"></div>
+        </div>
+        <div class="palette-row">
+          <span class="cell-editor-label">Calidad</span>
+          <div class="palette-btns" id="paletteQuality"></div>
+        </div>
+        <div class="palette-row">
+          <span class="cell-editor-label">Bajo</span>
+          <div class="palette-btns" id="paletteBass"></div>
+        </div>
+        <div class="palette-row">
+          <span class="cell-editor-label">Especial</span>
+          <div class="palette-btns" id="paletteSpecial"></div>
+        </div>
+      </div>
+      <div class="cell-editor-actions">
+        <button type="button" class="btn" id="btnCellInsertBefore">+ Compás antes</button>
+        <button type="button" class="btn" id="btnCellInsertAfter">+ Compás después</button>
+      </div>
+    </div>
+    <div class="cell-edit-bar" id="cellEditBar">
+      <input type="text" id="cellEditorInput" spellcheck="false" placeholder="Am Dm">
+      <button type="button" class="btn icon" id="btnCellPaletteToggle" title="Símbolos">🎹</button>
+      <button type="button" class="btn primary" id="btnCellDone">Listo</button>
     </div>
   </div>
 </div>
@@ -1826,19 +1839,38 @@ document.getElementById('fChartText').addEventListener('blur', e=>{
 });
 
 /* ---- fullscreen chart editor: opening/closing ---- */
+let chartEditorMode = 'grid';
+function showChartGridMode(){
+  document.getElementById('chartGridBody').classList.remove('hidden');
+  document.getElementById('chartTextBody').classList.add('hidden');
+  document.getElementById('btnChartModeToggle').textContent = 'Texto';
+  chartEditorMode = 'grid';
+  updateChartPreview();
+}
+function showChartTextMode(){
+  closeCellEditBar();
+  document.getElementById('chartGridBody').classList.add('hidden');
+  document.getElementById('chartTextBody').classList.remove('hidden');
+  document.getElementById('btnChartModeToggle').textContent = 'Cuadrícula';
+  chartEditorMode = 'text';
+  setTimeout(()=>document.getElementById('fChartText').focus(), 60);
+}
 function openChartEditorScreen(){
   document.getElementById('chartEditorSongTitle').textContent =
     document.getElementById('fTitle').value.trim() || 'Nueva canción';
   document.getElementById('chartEditorScreen').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-  updateChartPreview();
-  setTimeout(()=>document.getElementById('fChartText').focus(), 60);
+  showChartGridMode();
 }
 function closeChartEditorScreen(){
+  closeCellEditBar();
   document.getElementById('chartEditorScreen').classList.add('hidden');
   document.body.style.overflow = '';
   updateChartPreview();
 }
+document.getElementById('btnChartModeToggle').addEventListener('click', ()=>{
+  if(chartEditorMode === 'grid') showChartTextMode(); else showChartGridMode();
+});
 document.getElementById('btnOpenChartEditor').addEventListener('click', openChartEditorScreen);
 document.getElementById('btnCloseChartEditor').addEventListener('click', closeChartEditorScreen);
 
@@ -1871,7 +1903,12 @@ document.addEventListener('keydown', e=>{
   }
 });
 document.addEventListener('keydown', e=>{
-  if(e.key === 'Escape' && !document.getElementById('chartEditorScreen').classList.contains('hidden')){
+  if(e.key !== 'Escape') return;
+  if(!document.getElementById('cellPaletteSheet').classList.contains('hidden')){
+    document.getElementById('btnCellPaletteToggle').click();
+  } else if(!document.getElementById('cellEditDock').classList.contains('hidden')){
+    closeCellEditBar();
+  } else if(!document.getElementById('chartEditorScreen').classList.contains('hidden')){
     closeChartEditorScreen();
   }
 });
@@ -2005,54 +2042,72 @@ document.getElementById('chartPreviewFull').addEventListener('click', e=>{
   const dupBtn = e.target.closest('[data-dup-section]');
   if(dupBtn){ duplicateChartSection(Number(dupBtn.dataset.dupSection)); return; }
   const cell = e.target.closest('[data-cell-section]');
-  if(cell) openCellEditor(Number(cell.dataset.cellSection), Number(cell.dataset.cellMeasure));
+  if(cell) openCellEdit(Number(cell.dataset.cellSection), Number(cell.dataset.cellMeasure));
 });
 
-/* ---- single-measure (cell) editor: tap any cell in the live chart
-   preview to edit just that measure in a focused fullscreen view, with a
-   tap-to-insert symbol palette instead of typing chord syntax by hand. ---- */
-let cellEditorCtx = null, cellEndingValue = null;
-function openCellEditor(sectionIdx, measureIdx){
+/* ---- in-place cell editing: tap a cell in the live grid to edit it right
+   there (grid stays visible behind a sticky bottom bar), with an optional
+   symbol palette that slides up like a custom keyboard on top of it. ---- */
+let cellEditCtx = null, cellEndingValue = null;
+function openCellEdit(sectionIdx, measureIdx){
   const chart = parseChartText(document.getElementById('fChartText').value);
   const section = chart.sections[sectionIdx];
   const measure = section && section.measures[measureIdx];
   if(!measure) return;
-  cellEditorCtx = { sectionIdx, measureIdx };
-  document.getElementById('cellEditorContext').textContent =
-    `Sección ${section.label}${section.name ? ' · '+section.name : ''} · compás ${measureIdx+1}`;
+  cellEditCtx = { sectionIdx, measureIdx };
+  cellEndingValue = measure.ending || null;
+  updateCellEndingButtons();
   document.getElementById('cellEditorInput').value = measure.text || '';
-  setCellEnding(measure.ending);
-  updateCellEditorPreview();
-  document.getElementById('cellEditorScreen').classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-  setTimeout(()=>{
-    const inp = document.getElementById('cellEditorInput');
-    inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
-  }, 60);
+  document.querySelectorAll('.chart-cell.active-edit').forEach(el=>el.classList.remove('active-edit'));
+  const cellEl = document.querySelector(`[data-cell-section="${sectionIdx}"][data-cell-measure="${measureIdx}"]`);
+  if(cellEl) cellEl.classList.add('active-edit');
+  document.getElementById('cellEditDock').classList.remove('hidden');
+  const inp = document.getElementById('cellEditorInput');
+  setTimeout(()=>{ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 30);
 }
-function closeCellEditor(){
-  document.getElementById('cellEditorScreen').classList.add('hidden');
-  document.body.style.overflow = '';
-  cellEditorCtx = null;
+function commitCellEdit(){
+  if(!cellEditCtx) return;
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[cellEditCtx.sectionIdx];
+  const measure = section && section.measures[cellEditCtx.measureIdx];
+  if(measure){
+    measure.text = document.getElementById('cellEditorInput').value.trim();
+    measure.ending = cellEndingValue;
+    document.getElementById('fChartText').value = chartToText(chart);
+    updateChartPreview();
+  }
 }
-function updateCellEditorPreview(){
-  const text = document.getElementById('cellEditorInput').value.trim();
-  const preview = document.getElementById('cellEditorPreview');
-  if(!text){ preview.innerHTML = '<span class="hint" style="font-size:14px;">(vacío)</span>'; return; }
-  if(isMeasureSpecial(text)){ preview.textContent = text; return; }
-  preview.innerHTML = text.split(/\s+/).filter(Boolean)
-    .map(c=>`<span style="margin:0 8px;">${escapeHtml(c)}</span>`).join('');
+function closeCellEditBar(){
+  if(cellEditCtx) commitCellEdit();
+  document.getElementById('cellEditDock').classList.add('hidden');
+  document.getElementById('cellPaletteSheet').classList.add('hidden');
+  document.querySelectorAll('.chart-cell.active-edit').forEach(el=>el.classList.remove('active-edit'));
+  cellEditCtx = null;
 }
-document.getElementById('cellEditorInput').addEventListener('input', updateCellEditorPreview);
-function setCellEnding(val){
-  cellEndingValue = val || null;
+document.getElementById('btnCellDone').addEventListener('click', closeCellEditBar);
+document.getElementById('cellEditorInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter'){ e.preventDefault(); closeCellEditBar(); }
+});
+function updateCellEndingButtons(){
   document.getElementById('btnCellEndNone').classList.toggle('active', !cellEndingValue);
   document.getElementById('btnCellEnd1').classList.toggle('active', cellEndingValue==='1');
   document.getElementById('btnCellEnd2').classList.toggle('active', cellEndingValue==='2');
 }
-document.getElementById('btnCellEndNone').addEventListener('click', ()=>setCellEnding(null));
-document.getElementById('btnCellEnd1').addEventListener('click', ()=>setCellEnding('1'));
-document.getElementById('btnCellEnd2').addEventListener('click', ()=>setCellEnding('2'));
+document.getElementById('btnCellEndNone').addEventListener('click', ()=>{ cellEndingValue=null; updateCellEndingButtons(); });
+document.getElementById('btnCellEnd1').addEventListener('click', ()=>{ cellEndingValue='1'; updateCellEndingButtons(); });
+document.getElementById('btnCellEnd2').addEventListener('click', ()=>{ cellEndingValue='2'; updateCellEndingButtons(); });
+
+// The "🎹" button toggles the symbol sheet in place of the OS keyboard —
+// inputmode="none" suppresses the native keyboard while the sheet is open
+// so the two don't fight for screen space, matching a real custom-keyboard.
+document.getElementById('btnCellPaletteToggle').addEventListener('click', ()=>{
+  const sheet = document.getElementById('cellPaletteSheet');
+  const inp = document.getElementById('cellEditorInput');
+  const opening = sheet.classList.contains('hidden');
+  sheet.classList.toggle('hidden', !opening);
+  if(opening){ inp.setAttribute('inputmode','none'); inp.blur(); setTimeout(()=>inp.focus(),10); }
+  else { inp.removeAttribute('inputmode'); inp.focus(); }
+});
 
 const CELL_PALETTE = {
   paletteNotes: ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],
@@ -2072,7 +2127,6 @@ function insertAtCursor(input, token){
   if(token === 'N.C.' || token === '%'){
     input.value = token;
     input.setSelectionRange(token.length, token.length);
-    input.focus();
     return;
   }
   const start = input.selectionStart ?? input.value.length;
@@ -2085,67 +2139,52 @@ function insertAtCursor(input, token){
   input.value = before + insertion + after;
   const newPos = start + insertion.length;
   input.setSelectionRange(newPos, newPos);
-  input.focus();
 }
 document.querySelectorAll('.palette-btns').forEach(container=>{
   container.addEventListener('click', e=>{
     const btn = e.target.closest('[data-insert]');
     if(!btn) return;
-    insertAtCursor(document.getElementById('cellEditorInput'), btn.dataset.insert);
-    updateCellEditorPreview();
+    const inp = document.getElementById('cellEditorInput');
+    insertAtCursor(inp, btn.dataset.insert);
+    inp.focus();
   });
 });
-document.getElementById('btnCellSave').addEventListener('click', ()=>{
-  if(!cellEditorCtx) return;
-  const chart = parseChartText(document.getElementById('fChartText').value);
-  const section = chart.sections[cellEditorCtx.sectionIdx];
-  const measure = section && section.measures[cellEditorCtx.measureIdx];
-  if(!measure){ closeCellEditor(); return; }
-  measure.text = document.getElementById('cellEditorInput').value.trim();
-  measure.ending = cellEndingValue;
-  document.getElementById('fChartText').value = chartToText(chart);
-  updateChartPreview();
-  closeCellEditor();
-  toast('Compás actualizado');
-});
 document.getElementById('btnCellDelete').addEventListener('click', ()=>{
-  if(!cellEditorCtx) return;
+  if(!cellEditCtx) return;
   confirmSheet('Eliminar compás', '¿Eliminar este compás de la sección?', ()=>{
     const chart = parseChartText(document.getElementById('fChartText').value);
-    const section = chart.sections[cellEditorCtx.sectionIdx];
-    if(section) section.measures.splice(cellEditorCtx.measureIdx, 1);
+    const section = chart.sections[cellEditCtx.sectionIdx];
+    if(section) section.measures.splice(cellEditCtx.measureIdx, 1);
     document.getElementById('fChartText').value = chartToText(chart);
+    cellEditCtx = null; // nothing left to commit — already applied directly above
+    closeCellEditBar();
     updateChartPreview();
-    closeCellEditor();
     toast('Compás eliminado');
   }, 'Eliminar');
 });
 function insertMeasureRelative(offset){
-  if(!cellEditorCtx) return;
+  if(!cellEditCtx) return;
+  commitCellEdit();
   const chart = parseChartText(document.getElementById('fChartText').value);
-  const section = chart.sections[cellEditorCtx.sectionIdx];
+  const section = chart.sections[cellEditCtx.sectionIdx];
   if(!section) return;
-  const idx = cellEditorCtx.measureIdx + offset;
+  const idx = cellEditCtx.measureIdx + offset;
   section.measures.splice(idx, 0, {text:'', ending:null});
   document.getElementById('fChartText').value = chartToText(chart);
   updateChartPreview();
-  cellEditorCtx.measureIdx = idx;
-  document.getElementById('cellEditorContext').textContent =
-    `Sección ${section.label}${section.name ? ' · '+section.name : ''} · compás ${idx+1}`;
-  document.getElementById('cellEditorInput').value = '';
-  setCellEnding(null);
-  updateCellEditorPreview();
-  document.getElementById('cellEditorInput').focus();
+  cellEditCtx.measureIdx = idx;
+  cellEndingValue = null;
+  updateCellEndingButtons();
+  const inp = document.getElementById('cellEditorInput');
+  inp.value = '';
+  document.querySelectorAll('.chart-cell.active-edit').forEach(el=>el.classList.remove('active-edit'));
+  const cellEl = document.querySelector(`[data-cell-section="${cellEditCtx.sectionIdx}"][data-cell-measure="${idx}"]`);
+  if(cellEl) cellEl.classList.add('active-edit');
+  inp.focus();
   toast('Compás insertado');
 }
 document.getElementById('btnCellInsertBefore').addEventListener('click', ()=>insertMeasureRelative(0));
 document.getElementById('btnCellInsertAfter').addEventListener('click', ()=>insertMeasureRelative(1));
-document.getElementById('btnCloseCellEditor').addEventListener('click', closeCellEditor);
-document.addEventListener('keydown', e=>{
-  if(e.key === 'Escape' && !document.getElementById('cellEditorScreen').classList.contains('hidden')){
-    closeCellEditor();
-  }
-});
 
 /* ---- voice assignment: line-by-line UI instead of manual bracket tags ---- */
 function parseLyricsIntoBlocks(lyricsText){
