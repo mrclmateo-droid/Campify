@@ -186,10 +186,10 @@ nav#tabbar .brand{display:none;}
 .empty .big{font-size:15px; color:var(--text); margin-bottom:6px; font-weight:600;}
 
 /* ---- fullscreen chord chart editor ---- */
-#chartEditorScreen{
+#chartEditorScreen, #lyricsEditorScreen{
   position:fixed; inset:0; z-index:140; background:var(--bg); display:flex; flex-direction:column;
 }
-#chartEditorScreen.hidden{display:none;}
+#chartEditorScreen.hidden, #lyricsEditorScreen.hidden{display:none;}
 .chart-editor-bar{
   display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--border);
   padding-top:calc(10px + env(safe-area-inset-top)); flex:none; overflow-x:auto;
@@ -203,6 +203,10 @@ nav#tabbar .brand{display:none;}
   font-family:var(--font-mono); font-size:16px; line-height:1.7; padding:0;
 }
 #fChartText:focus{outline:none;}
+#lyricsEditorPane #fLyrics{
+  width:100%; height:100%; min-height:240px; font-size:16px; border:0; background:none; outline:none;
+  font-family:var(--font-mono); line-height:1.7; white-space:pre; color:var(--text); resize:none;
+}
 @media(min-width:880px){
   .chart-editor-body{flex-direction:row;}
   .chart-editor-pane.preview{border-top:0; border-left:1px solid var(--border);}
@@ -595,7 +599,12 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <div class="field"><label for="fNotes">Notas (opcional)</label><input type="text" id="fNotes" placeholder="Subir tono en el puente…"></div>
       </div>
       <div class="field">
-        <label for="fLyrics">Letra y acordes</label>
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <label for="fLyrics" style="margin:0;">Letra y acordes</label>
+          <button type="button" class="btn small" id="btnOpenLyricsEditor">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg> Abrir editor
+          </button>
+        </div>
         <textarea id="fLyrics" spellcheck="false" placeholder="Am              F&#10;Hoy quiero volver a encontrarte&#10;C               G&#10;aunque la noche vuelva a caer"></textarea>
       </div>
       <div class="row" style="gap:8px; margin-bottom:14px;">
@@ -754,6 +763,20 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <button class="btn small" id="btnToggleChordsPresent">Ocultar acordes</button>
       <button class="btn small" id="btnShowChordsPresent">Ver acordes</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ FULLSCREEN LYRICS + CHORDS EDITOR ============ -->
+<div id="lyricsEditorScreen" class="hidden">
+  <div class="chart-editor-bar">
+    <button class="btn icon ghost" id="btnCloseLyricsEditor" title="Volver"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div style="flex:1; min-width:0;">
+      <div style="font-size:15px; font-weight:650;">Letra y acordes</div>
+      <div style="font-size:12px; color:var(--text-dim);" id="lyricsEditorSongTitle"></div>
+    </div>
+  </div>
+  <div class="chart-editor-body">
+    <div class="chart-editor-pane" id="lyricsEditorPane" style="flex:1;"></div>
   </div>
 </div>
 
@@ -1732,6 +1755,35 @@ function closeChartEditorScreen(){
 }
 document.getElementById('btnOpenChartEditor').addEventListener('click', openChartEditorScreen);
 document.getElementById('btnCloseChartEditor').addEventListener('click', closeChartEditorScreen);
+
+/* ---- fullscreen lyrics editor: reparents the ONE real #fLyrics textarea
+   between the small form and this screen, rather than keeping a second
+   copy in sync (which is how the chord chart editor risks nothing either —
+   there's exactly one textarea, just relocated). ---- */
+const lyricsFieldHome = document.getElementById('fLyrics').parentElement;
+const lyricsFieldAnchor = document.createComment('fLyrics-home');
+lyricsFieldHome.insertBefore(lyricsFieldAnchor, document.getElementById('fLyrics'));
+function openLyricsEditorScreen(){
+  document.getElementById('lyricsEditorSongTitle').textContent =
+    document.getElementById('fTitle').value.trim() || 'Nueva canción';
+  document.getElementById('lyricsEditorPane').appendChild(document.getElementById('fLyrics'));
+  document.getElementById('lyricsEditorScreen').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  const ta = document.getElementById('fLyrics');
+  setTimeout(()=>{ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 60);
+}
+function closeLyricsEditorScreen(){
+  lyricsFieldHome.insertBefore(document.getElementById('fLyrics'), lyricsFieldAnchor.nextSibling);
+  document.getElementById('lyricsEditorScreen').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+document.getElementById('btnOpenLyricsEditor').addEventListener('click', openLyricsEditorScreen);
+document.getElementById('btnCloseLyricsEditor').addEventListener('click', closeLyricsEditorScreen);
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape' && !document.getElementById('lyricsEditorScreen').classList.contains('hidden')){
+    closeLyricsEditorScreen();
+  }
+});
 document.addEventListener('keydown', e=>{
   if(e.key === 'Escape' && !document.getElementById('chartEditorScreen').classList.contains('hidden')){
     closeChartEditorScreen();
@@ -2310,8 +2362,8 @@ document.getElementById('segTheme').addEventListener('click', e=>{
   state.settings.theme = btn.dataset.theme;
   applyTheme(); saveState(); renderSettings();
 });
-document.getElementById('fontMinus').addEventListener('click', ()=>{ state.settings.fontSize = clamp(state.settings.fontSize-2,14,44); applyFontSize(); saveState(); renderSettings(); });
-document.getElementById('fontPlus').addEventListener('click', ()=>{ state.settings.fontSize = clamp(state.settings.fontSize+2,14,44); applyFontSize(); saveState(); renderSettings(); });
+document.getElementById('fontMinus').addEventListener('click', ()=>{ state.settings.fontSize = clamp(state.settings.fontSize-2,8,44); applyFontSize(); saveState(); renderSettings(); });
+document.getElementById('fontPlus').addEventListener('click', ()=>{ state.settings.fontSize = clamp(state.settings.fontSize+2,8,44); applyFontSize(); saveState(); renderSettings(); });
 document.getElementById('chkShowChords').addEventListener('change', e=>{ state.settings.showChords = e.target.checked; applyShowChords(); saveState(); });
 document.getElementById('chkMetronome').addEventListener('change', e=>{ state.settings.metronome = e.target.checked; saveState(); setupMetronome(); });
 document.getElementById('chkWakeLock').addEventListener('change', e=>{ state.settings.wakeLock = e.target.checked; saveState(); if(!e.target.checked) releaseWakeLock(); else if(!document.getElementById('present').classList.contains('hidden')) requestWakeLock(); });
@@ -2922,7 +2974,7 @@ document.getElementById('chromeToggleTab').addEventListener('click', ()=> setChr
       e.preventDefault(); // don't let the browser's own page-zoom fight our font-size zoom
       const dist = touchDist(e.touches[0], e.touches[1]);
       const scale = dist / pinchStartDist;
-      pinchLiveSize = clamp(Math.round(pinchStartSize * scale), 14, 44);
+      pinchLiveSize = clamp(Math.round(pinchStartSize * scale), 8, 44);
       document.documentElement.style.setProperty('--lyrics-size', pinchLiveSize + 'px');
       const indicator = document.getElementById('fontSizeIndicator');
       indicator.textContent = pinchLiveSize + ' px';
