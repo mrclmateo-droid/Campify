@@ -218,15 +218,17 @@ nav#tabbar .brand{display:none;}
 }
 #cellEditDock.hidden{display:none;}
 .cell-edit-bar{
-  display:flex; align-items:center; gap:8px; padding:10px 12px;
-  padding-bottom:calc(10px + env(safe-area-inset-bottom));
+  display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:8px 12px;
+  padding-bottom:calc(8px + env(safe-area-inset-bottom));
   background:var(--bg-elev); border-top:1px solid var(--border); flex:none;
 }
-#cellEditorInput{
-  flex:1; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius);
-  padding:11px 12px; color:var(--text); font-family:var(--font-mono); font-size:17px;
+.chart-cell.editing{padding:6px 2px; background:var(--bg-elev-2);}
+.chart-cell-inline-input{
+  width:100%; background:none; border:0; outline:none; text-align:center;
+  font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--accent);
+  padding:0;
 }
-#cellEditorInput:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent);}
+.chart-cell-inline-input:focus{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;}
 .cell-editor-label{font-size:11px; color:var(--text-dim); font-weight:600; letter-spacing:.02em; text-transform:uppercase;}
 .cell-editor-ending-btns{display:flex; gap:8px; flex:1;}
 .cell-editor-ending-btns .btn.active{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
@@ -250,7 +252,6 @@ nav#tabbar .brand{display:none;}
 .palette-btn.special{font-family:inherit; font-weight:600; font-size:12px;}
 .cell-editor-actions{display:flex; gap:8px; padding-top:4px; border-top:1px solid var(--border);}
 .cell-editor-actions .btn{flex:1;}
-.chart-cell.active-edit{outline:2px solid var(--accent); outline-offset:-2px; background:var(--bg-elev-2);}
 
 /* ---- chord diagram glossary ---- */
 .chord-diagram-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(80px,1fr)); gap:14px; margin:12px 0;}
@@ -475,7 +476,12 @@ nav#tabbar .brand{display:none;}
 #pCapo{font-size:14px; font-weight:700; min-width:76px; text-align:center;}
 .transport .btn.play svg{width:26px;height:26px;}
 .sub-controls{display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;}
-.speed-seg{align-self:center;}
+.speed-stepper{
+  align-self:center; display:flex; align-items:center; gap:10px;
+  background:var(--bg-elev-2); border-radius:999px; padding:4px 6px;
+}
+.speed-stepper .btn.icon{width:30px; height:30px; font-size:17px; font-weight:700; border-radius:999px;}
+.speed-stepper span{font-size:13px; font-weight:600; color:var(--text-dim); min-width:26px; text-align:center;}
 .speed-seg button{min-height:var(--tap); padding:9px 18px; font-size:14px; font-weight:600;}
 .metro-dot{width:10px; height:10px; border-radius:50%; background:var(--bg-elev-3); transition:background .05s, transform .05s;}
 .metro-dot.on{background:var(--accent); transform:scale(1.5);}
@@ -584,9 +590,9 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           <button class="btn" id="btnImportPdfGrid" title="Importar un PDF de tabla de acordes por compás numerado (ej. Chord ai)">
             <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><rect x="7" y="11" width="4" height="4"/><rect x="13" y="11" width="4" height="4"/></svg> Tabla numerada
           </button>
-          <input type="file" id="filePdfImport" accept="application/pdf" class="hidden">
-          <input type="file" id="filePdfPlaylistImport" accept="application/pdf" class="hidden">
-          <input type="file" id="filePdfGridImport" accept="application/pdf" class="hidden">
+          <input type="file" id="filePdfImport" accept="application/pdf" multiple class="hidden">
+          <input type="file" id="filePdfPlaylistImport" accept="application/pdf" multiple class="hidden">
+          <input type="file" id="filePdfGridImport" accept="application/pdf" multiple class="hidden">
         </div>
       </div>
       <div class="search">
@@ -828,10 +834,10 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <svg viewBox="0 0 24 24"><path d="M18 15l-6-6-6 6"/></svg>
       </button>
     </div>
-    <div class="seg speed-seg" id="segSpeed">
-      <button data-speed="slow">Lento</button>
-      <button data-speed="medium" class="active">Medio</button>
-      <button data-speed="fast">Rápido</button>
+    <div class="speed-stepper" id="segSpeed">
+      <button type="button" class="btn icon" id="btnSpeedDown" title="Más lento">−</button>
+      <span id="speedVal">30</span>
+      <button type="button" class="btn icon" id="btnSpeedUp" title="Más rápido">+</button>
     </div>
     <div class="transport">
       <button class="btn icon" id="btnPrevSong" title="Canción anterior"><svg viewBox="0 0 24 24"><path d="M19 20L9 12l10-8v16zM5 19V5"/></svg></button>
@@ -942,7 +948,6 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       </div>
     </div>
     <div class="cell-edit-bar" id="cellEditBar">
-      <input type="text" id="cellEditorInput" spellcheck="false" placeholder="Am Dm">
       <button type="button" class="btn icon" id="btnCellPaletteToggle" title="Símbolos">🎹</button>
       <button type="button" class="btn primary" id="btnCellDone">Listo</button>
     </div>
@@ -1477,7 +1482,7 @@ function defaultState(){
     ],
     settings: {
       theme:'dark', fontSize:22, showChords:true, metronome:false, wakeLock:true,
-      scrollSpeed:'medium', lastSongId: songs[0].id, lastTracklistId: null
+      scrollSpeed:30, lastSongId: songs[0].id, lastTracklistId: null
     }
   };
 }
@@ -1489,6 +1494,10 @@ function loadState(){
     const parsed = JSON.parse(raw);
     if(!parsed || !Array.isArray(parsed.songs)) return defaultState();
     parsed.settings = Object.assign(defaultState().settings, parsed.settings||{});
+    if(typeof parsed.settings.scrollSpeed === 'string'){
+      // migrating from the old 3-preset speed setting to the new numeric one
+      parsed.settings.scrollSpeed = {slow:16, medium:30, fast:48}[parsed.settings.scrollSpeed] || 30;
+    }
     parsed.tracklists = parsed.tracklists || [];
     parsed.songs.forEach(s=>{ if(typeof s.transpose !== 'number') s.transpose = 0; if(typeof s.capo !== 'number') s.capo = 0; if(!s.chordChart || !Array.isArray(s.chordChart.sections)) s.chordChart = {sections:[]}; });
     return parsed;
@@ -2120,51 +2129,67 @@ document.getElementById('chartPreviewFull').addEventListener('click', e=>{
   const dupBtn = e.target.closest('[data-dup-section]');
   if(dupBtn){ duplicateChartSection(Number(dupBtn.dataset.dupSection)); return; }
   const cell = e.target.closest('[data-cell-section]');
-  if(cell) openCellEdit(Number(cell.dataset.cellSection), Number(cell.dataset.cellMeasure));
+  if(cell && !cell.classList.contains('editing')) openCellEdit(Number(cell.dataset.cellSection), Number(cell.dataset.cellMeasure));
 });
 
-/* ---- in-place cell editing: tap a cell in the live grid to edit it right
-   there (grid stays visible behind a sticky bottom bar), with an optional
-   symbol palette that slides up like a custom keyboard on top of it. ---- */
+/* ---- in-place cell editing: the CELL ITSELF becomes the text field (no
+   separate input bar) — tap a cell, type right into it with the normal
+   keyboard, tap elsewhere to move on. A slim dock (🎹 for symbols, Listo to
+   finish) stays docked at the bottom for the things typing alone can't do:
+   endings, delete, insert measures. ---- */
 let cellEditCtx = null, cellEndingValue = null;
+function injectCellInput(sectionIdx, measureIdx, text){
+  document.querySelectorAll('.chart-cell.editing').forEach(el=>el.classList.remove('editing'));
+  const cellEl = document.querySelector(`[data-cell-section="${sectionIdx}"][data-cell-measure="${measureIdx}"]`);
+  if(!cellEl) return null;
+  cellEl.classList.add('editing');
+  cellEl.innerHTML = `<input type="text" class="chart-cell-inline-input" spellcheck="false" autocomplete="off" autocapitalize="off" value="${escapeHtml(text||'')}">`;
+  const inp = cellEl.querySelector('input');
+  inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); closeCellEditBar(); } });
+  return inp;
+}
+function activeCellInput(){ return document.querySelector('.chart-cell.editing input'); }
 function openCellEdit(sectionIdx, measureIdx){
   const chart = parseChartText(document.getElementById('fChartText').value);
   const section = chart.sections[sectionIdx];
   const measure = section && section.measures[measureIdx];
   if(!measure) return;
+  if(cellEditCtx) commitCellEdit(); // save whatever was being edited before jumping to this cell
   cellEditCtx = { sectionIdx, measureIdx };
   cellEndingValue = measure.ending || null;
   updateCellEndingButtons();
-  document.getElementById('cellEditorInput').value = measure.text || '';
-  document.querySelectorAll('.chart-cell.active-edit').forEach(el=>el.classList.remove('active-edit'));
-  const cellEl = document.querySelector(`[data-cell-section="${sectionIdx}"][data-cell-measure="${measureIdx}"]`);
-  if(cellEl) cellEl.classList.add('active-edit');
+  const inp = injectCellInput(sectionIdx, measureIdx, measure.text);
   document.getElementById('cellEditDock').classList.remove('hidden');
-  const inp = document.getElementById('cellEditorInput');
-  setTimeout(()=>{ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 30);
+  if(inp) setTimeout(()=>{ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 30);
 }
 function commitCellEdit(){
   if(!cellEditCtx) return;
+  const inp = activeCellInput();
+  if(!inp) return;
   const chart = parseChartText(document.getElementById('fChartText').value);
   const section = chart.sections[cellEditCtx.sectionIdx];
   const measure = section && section.measures[cellEditCtx.measureIdx];
   if(measure){
-    measure.text = document.getElementById('cellEditorInput').value.trim();
+    measure.text = inp.value.trim();
     measure.ending = cellEndingValue;
     document.getElementById('fChartText').value = chartToText(chart);
-    updateChartPreview();
+    updateChartPreview(); // re-renders the grid, which naturally removes the injected input too
   }
 }
 function closeCellEditBar(){
   if(cellEditCtx) commitCellEdit();
   document.getElementById('cellEditDock').classList.add('hidden');
   document.getElementById('cellPaletteSheet').classList.add('hidden');
-  document.querySelectorAll('.chart-cell.active-edit').forEach(el=>el.classList.remove('active-edit'));
   cellEditCtx = null;
 }
 document.getElementById('btnCellDone').addEventListener('click', closeCellEditBar);
-document.getElementById('cellEditorInput').addEventListener('keydown', e=>{
-  if(e.key === 'Enter'){ e.preventDefault(); closeCellEditBar(); }
+// Tapping fully outside the cell/dock/palette also finishes editing, like
+// dismissing any other text field on tap-away.
+document.addEventListener('pointerdown', e=>{
+  if(!cellEditCtx) return;
+  if(e.target.closest('.chart-cell.editing') || e.target.closest('#cellEditDock') || e.target.closest('#cellPaletteSheet')) return;
+  if(e.target.closest('[data-cell-section]')) return; // switching cells is handled by the click handler above
+  closeCellEditBar();
 });
 function updateCellEndingButtons(){
   document.getElementById('btnCellEndNone').classList.toggle('active', !cellEndingValue);
@@ -2177,12 +2202,13 @@ document.getElementById('btnCellEnd2').addEventListener('click', ()=>{ cellEndin
 
 // The "🎹" button toggles the symbol sheet in place of the OS keyboard —
 // inputmode="none" suppresses the native keyboard while the sheet is open
-// so the two don't fight for screen space, matching a real custom-keyboard.
+// so the two don't fight for screen space, matching a real custom keyboard.
 document.getElementById('btnCellPaletteToggle').addEventListener('click', ()=>{
   const sheet = document.getElementById('cellPaletteSheet');
-  const inp = document.getElementById('cellEditorInput');
+  const inp = activeCellInput();
   const opening = sheet.classList.contains('hidden');
   sheet.classList.toggle('hidden', !opening);
+  if(!inp) return;
   if(opening){ inp.setAttribute('inputmode','none'); inp.blur(); setTimeout(()=>inp.focus(),10); }
   else { inp.removeAttribute('inputmode'); inp.focus(); }
 });
@@ -2222,7 +2248,8 @@ document.querySelectorAll('.palette-btns').forEach(container=>{
   container.addEventListener('click', e=>{
     const btn = e.target.closest('[data-insert]');
     if(!btn) return;
-    const inp = document.getElementById('cellEditorInput');
+    const inp = activeCellInput();
+    if(!inp) return;
     insertAtCursor(inp, btn.dataset.insert);
     inp.focus();
   });
@@ -2235,7 +2262,8 @@ document.getElementById('btnCellDelete').addEventListener('click', ()=>{
     if(section) section.measures.splice(cellEditCtx.measureIdx, 1);
     document.getElementById('fChartText').value = chartToText(chart);
     cellEditCtx = null; // nothing left to commit — already applied directly above
-    closeCellEditBar();
+    document.getElementById('cellEditDock').classList.add('hidden');
+    document.getElementById('cellPaletteSheet').classList.add('hidden');
     updateChartPreview();
     toast('Compás eliminado');
   }, 'Eliminar');
@@ -2253,12 +2281,8 @@ function insertMeasureRelative(offset){
   cellEditCtx.measureIdx = idx;
   cellEndingValue = null;
   updateCellEndingButtons();
-  const inp = document.getElementById('cellEditorInput');
-  inp.value = '';
-  document.querySelectorAll('.chart-cell.active-edit').forEach(el=>el.classList.remove('active-edit'));
-  const cellEl = document.querySelector(`[data-cell-section="${cellEditCtx.sectionIdx}"][data-cell-measure="${idx}"]`);
-  if(cellEl) cellEl.classList.add('active-edit');
-  inp.focus();
+  const inp = injectCellInput(cellEditCtx.sectionIdx, idx, '');
+  if(inp) inp.focus();
   toast('Compás insertado');
 }
 document.getElementById('btnCellInsertBefore').addEventListener('click', ()=>insertMeasureRelative(0));
@@ -3241,22 +3265,29 @@ function bumpBpm(delta){
 }
 
 /* ---- autoscroll engine ---- */
-// Fixed speed presets in px/second, independent of the song's BPM field
-// (simpler and more predictable to use live than a BPM-derived speed;
-// BPM is still shown and used for the metronome).
-const SPEED_PRESETS = { slow: 16, medium: 30, fast: 48 };
+// scrollSpeed is a plain number in px/second now (used to be 3 fixed presets
+// — 8..80 covers comfortably slower/faster than those ever were, in steps
+// small enough to fine-tune live instead of jumping between 3 fixed gears).
+const SPEED_MIN = 8, SPEED_MAX = 80, SPEED_STEP = 4;
+const OLD_SPEED_PRESETS = { slow: 16, medium: 30, fast: 48 };
+function normalizeScrollSpeed(){
+  const v = state.settings.scrollSpeed;
+  if(typeof v === 'string') state.settings.scrollSpeed = OLD_SPEED_PRESETS[v] || 30;
+  else if(typeof v !== 'number' || isNaN(v)) state.settings.scrollSpeed = 30;
+}
 function computeSpeedPxPerSec(){
-  return SPEED_PRESETS[state.settings.scrollSpeed] || SPEED_PRESETS.medium;
+  return state.settings.scrollSpeed;
 }
 function updateSpeedChip(){
-  document.querySelectorAll('#segSpeed button').forEach(b=>{
-    b.classList.toggle('active', b.dataset.speed === state.settings.scrollSpeed);
-  });
+  document.getElementById('speedVal').textContent = state.settings.scrollSpeed;
 }
-document.getElementById('segSpeed').addEventListener('click', e=>{
-  const btn = e.target.closest('button');
-  if(!btn) return;
-  state.settings.scrollSpeed = btn.dataset.speed;
+document.getElementById('btnSpeedDown').addEventListener('click', ()=>{
+  state.settings.scrollSpeed = clamp(state.settings.scrollSpeed - SPEED_STEP, SPEED_MIN, SPEED_MAX);
+  updateSpeedChip();
+  saveState();
+});
+document.getElementById('btnSpeedUp').addEventListener('click', ()=>{
+  state.settings.scrollSpeed = clamp(state.settings.scrollSpeed + SPEED_STEP, SPEED_MIN, SPEED_MAX);
   updateSpeedChip();
   saveState();
 });
@@ -4014,14 +4045,17 @@ function openPdfPlaylistReview(songs){
 }
 function renderPdfPlaylistReview(){
   const rows = pdfPlaylistPending.map((s, i) => {
-    const measureCount = s.sections.reduce((sum, sec) => sum + sec.measures.length, 0);
+    const isChart = Array.isArray(s.sections);
+    const summary = isChart
+      ? `${s.sections.length} secciones, ${s.sections.reduce((sum, sec) => sum + sec.measures.length, 0)} compases`
+      : 'con letra y acordes';
     const warn = s.notes ? `<div class="hint" style="margin-top:2px; color:var(--text-dim);">⚠ ${escapeHtml(s.notes)}</div>` : '';
     return `
       <label class="picker-row" style="cursor:pointer;">
         <input type="checkbox" data-playlist-idx="${i}" ${s.include ? 'checked' : ''} style="margin-right:10px; flex:none;">
         <div class="info">
           <div class="t">${escapeHtml(s.title)}</div>
-          <div class="a">${escapeHtml(s.artist || 'Sin artista')} · ${s.sections.length} secciones, ${measureCount} compases</div>
+          <div class="a">${escapeHtml(s.artist || 'Sin artista')} · ${summary}</div>
           ${warn}
         </div>
       </label>`;
@@ -4046,10 +4080,13 @@ function renderPdfPlaylistReview(){
   document.getElementById('btnImportPlaylistSelected').addEventListener('click', ()=>{
     const toImport = pdfPlaylistPending.filter(s => s.include);
     toImport.forEach(s=>{
+      const isChart = Array.isArray(s.sections);
       state.songs.push({
         id: uid(), title: s.title, artist: s.artist || '', bpm: s.bpm || 100, key: s.key || '',
-        notes: s.notes ? 'Importado de un PDF con varias canciones. ' + s.notes : 'Importado de un PDF con varias canciones.',
-        lyrics: '', chordChart: { sections: s.sections }, transpose: 0, capo: 0, updatedAt: todayISO()
+        notes: s.notes ? 'Importado de PDF. ' + s.notes : 'Importado de PDF.',
+        lyrics: isChart ? '' : (s.lyrics || ''),
+        chordChart: { sections: isChart ? s.sections : [] },
+        transpose: 0, capo: 0, updatedAt: todayISO()
       });
     });
     saveState();
@@ -4067,21 +4104,27 @@ document.getElementById('btnImportPdfPlaylist').addEventListener('click', ()=>{
   document.getElementById('filePdfPlaylistImport').click();
 });
 document.getElementById('filePdfPlaylistImport').addEventListener('change', async e=>{
-  const file = e.target.files[0];
+  const files = [...e.target.files];
   e.target.value = '';
-  if(!file) return;
-  toast('Leyendo PDF… puede tardar unos segundos con muchas páginas');
-  try{
-    const songs = await pdfPlaylistToSongs(file);
-    if(!songs.length){
-      toast('No se reconoció ninguna canción en este PDF. ¿Es del formato de iReal Pro con varias canciones?');
-      return;
+  if(!files.length) return;
+  toast(files.length>1 ? `Leyendo ${files.length} PDF… puede tardar` : 'Leyendo PDF… puede tardar unos segundos con muchas páginas');
+  const allSongs = [];
+  let failedFiles = 0;
+  for(const file of files){
+    try{
+      const songs = await pdfPlaylistToSongs(file);
+      allSongs.push(...songs);
+    }catch(err){
+      console.error('Error al leer', file.name, ':', err);
+      failedFiles++;
     }
-    openPdfPlaylistReview(songs);
-  }catch(err){
-    console.error('Error al leer el PDF de varias canciones:', err);
-    toast('No se pudo leer este PDF. Puede que esté protegido, dañado, o en un formato distinto.');
   }
+  if(!allSongs.length){
+    toast('No se reconoció ninguna canción. ¿Son del formato de iReal Pro con varias canciones?');
+    return;
+  }
+  if(failedFiles) toast(`${failedFiles} archivo(s) no se pudieron leer — se muestran las demás`);
+  openPdfPlaylistReview(allSongs);
 });
 
 document.getElementById('btnImportPdfGrid').addEventListener('click', ()=>{
@@ -4092,22 +4135,29 @@ document.getElementById('btnImportPdfGrid').addEventListener('click', ()=>{
   document.getElementById('filePdfGridImport').click();
 });
 document.getElementById('filePdfGridImport').addEventListener('change', async e=>{
-  const file = e.target.files[0];
+  const files = [...e.target.files];
   e.target.value = '';
-  if(!file) return;
-  toast('Leyendo PDF…');
-  try{
-    const song = await pdfMeasureGridToChordChart(file);
-    const totalMeasures = song.sections.reduce((sum,s)=>sum+s.measures.length, 0);
-    if(!totalMeasures){
-      toast('No se reconoció ninguna tabla en este PDF. ¿Es del formato de compás numerado?');
-      return;
+  if(!files.length) return;
+  toast(files.length>1 ? `Leyendo ${files.length} PDF…` : 'Leyendo PDF…');
+  const results = [];
+  let failedFiles = 0;
+  for(const file of files){
+    try{
+      const song = await pdfMeasureGridToChordChart(file);
+      const totalMeasures = song.sections.reduce((sum,s)=>sum+s.measures.length, 0);
+      if(totalMeasures) results.push({ title: song.title, artist: '', key: song.key, bpm: song.bpm, sections: song.sections, notes: '' });
+      else failedFiles++;
+    }catch(err){
+      console.error('Error al leer', file.name, ':', err);
+      failedFiles++;
     }
-    openPdfPlaylistReview([{ title: song.title, artist: '', key: song.key, bpm: song.bpm, sections: song.sections, notes: '' }]);
-  }catch(err){
-    console.error('Error al leer el PDF de tabla numerada:', err);
-    toast('No se pudo leer este PDF. Puede que esté protegido, dañado, o en un formato distinto.');
   }
+  if(!results.length){
+    toast('No se reconoció ninguna tabla. ¿Son del formato de compás numerado?');
+    return;
+  }
+  if(failedFiles) toast(`${failedFiles} archivo(s) no se pudieron leer — se muestran las demás`);
+  openPdfPlaylistReview(results);
 });
 
 function openPdfReviewSheet(parsed){
@@ -4161,21 +4211,46 @@ document.getElementById('btnImportPdf').addEventListener('click', ()=>{
   document.getElementById('filePdfImport').click();
 });
 document.getElementById('filePdfImport').addEventListener('change', async e=>{
-  const file = e.target.files[0];
+  const files = [...e.target.files];
   e.target.value = '';
-  if(!file) return;
-  toast('Leyendo PDF…');
-  try{
-    const parsed = await pdfFileToChordChart(file);
-    if(!parsed.lyrics){
-      toast('No se pudo reconocer el formato de este PDF. Puedes pegar la letra a mano en el Editor.');
-      return;
+  if(!files.length) return;
+  if(files.length === 1){
+    toast('Leyendo PDF…');
+    try{
+      const parsed = await pdfFileToChordChart(files[0]);
+      if(!parsed.lyrics){
+        toast('No se pudo reconocer el formato de este PDF. Puedes pegar la letra a mano en el Editor.');
+        return;
+      }
+      openPdfReviewSheet(parsed);
+    }catch(err){
+      console.error('Error al leer el PDF:', err);
+      toast('No se pudo leer este PDF. Puede que esté protegido o dañado.');
     }
-    openPdfReviewSheet(parsed);
-  }catch(err){
-    console.error('Error al leer el PDF:', err);
-    toast('No se pudo leer este PDF. Puede que esté protegido o dañado.');
+    return;
   }
+  // Several files at once: skip the single-song detailed edit sheet (title/
+  // artist/key/bpm/lyrics fields for each) and go straight to the same
+  // bulk checklist the other two PDF importers use for multiple songs.
+  toast(`Leyendo ${files.length} PDF…`);
+  const results = [];
+  let failedFiles = 0;
+  for(const file of files){
+    try{
+      const parsed = await pdfFileToChordChart(file);
+      if(parsed.lyrics) results.push({ title: parsed.title||'Sin título', artist: parsed.artist||'', key: parsed.key||'', bpm: parsed.bpm||null, lyrics: parsed.lyrics, notes: '' });
+      else failedFiles++;
+    }catch(err){
+      console.error('Error al leer', file.name, ':', err);
+      failedFiles++;
+    }
+  }
+  if(!results.length){
+    toast('No se pudo reconocer el formato de ninguno de estos PDF.');
+    return;
+  }
+  if(failedFiles) toast(`${failedFiles} archivo(s) no se pudieron leer — se muestran las demás`);
+  openPdfPlaylistReview(results);
 });
 
 /* ============================================================
