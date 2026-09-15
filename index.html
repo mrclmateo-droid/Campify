@@ -1631,6 +1631,12 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
    ============================================================ */
 const libState = { query:'', sort:'alpha', artist:'', key:'', bpm:'', content:'' };
 function songHasLyrics(s){ return !!(s.lyrics && s.lyrics.trim()); }
+// Strips out the chord-lines, leaving just the words — for the "solo letra"
+// export option (reuses the same chord-line detector the colored-lyrics
+// renderer already relies on, so the two stay consistent).
+function plainLyricsOnly(lyrics){
+  return (lyrics||'').split('\n').filter(line => !isChordLine(line)).join('\n');
+}
 function songHasChart(s){
   return !!(s.chordChart && s.chordChart.sections && s.chordChart.sections.some(sec => sec.measures && sec.measures.length));
 }
@@ -2910,7 +2916,7 @@ function openPresent(songId, tracklistId){
    same rendering functions used on-screen, then hands off to the browser's
    native print dialog — "Save as PDF" from there needs no library, no
    internet, and matches exactly what a printed reference should look like. ---- */
-function exportSongToPdf(song){
+function exportSongToPdf(song, mode){
   if(!song) return;
   document.getElementById('printTitle').textContent = song.title || 'Sin título';
   const metaParts = [];
@@ -2921,25 +2927,73 @@ function exportSongToPdf(song){
   document.getElementById('printMeta').textContent = metaParts.join(' · ');
 
   const semitones = (song.transpose||0) - (song.capo||0);
-  document.getElementById('printLyrics').innerHTML = songHasLyrics(song)
-    ? chordHtmlForLyrics(song.lyrics, semitones) : '';
-  document.getElementById('printChart').innerHTML = songHasChart(song)
-    ? renderChordChartHtml(song.chordChart, semitones, false) : '';
+  const printLyricsEl = document.getElementById('printLyrics');
+  const printChartEl = document.getElementById('printChart');
 
-  if(!songHasLyrics(song) && !songHasChart(song)){
+  if(mode === 'lyrics-only'){
+    printLyricsEl.textContent = plainLyricsOnly(song.lyrics);
+    printChartEl.innerHTML = '';
+  } else if(mode === 'chart'){
+    printLyricsEl.innerHTML = '';
+    printChartEl.innerHTML = songHasChart(song) ? renderChordChartHtml(song.chordChart, semitones, false) : '';
+  } else { // 'lyrics-chords' (also the default, for any old call site with no mode)
+    printLyricsEl.innerHTML = songHasLyrics(song) ? chordHtmlForLyrics(song.lyrics, semitones) : '';
+    printChartEl.innerHTML = '';
+  }
+
+  if(!printLyricsEl.textContent.trim() && !printChartEl.textContent.trim()){
+    toast('No hay contenido para exportar con esa opción');
+    return;
+  }
+  // Call print() synchronously, right in the same click handler — Safari
+  // (and other browsers) block window.print() as an unwanted "automatic"
+  // popup if it fires even slightly async (e.g. via setTimeout), since that
+  // breaks the direct user-gesture chain it requires.
+  window.print();
+}
+// Lets the person pick exactly what goes on the page — only offering the
+// options this particular song actually has content for.
+function openExportPdfChooser(song){
+  if(!song) return;
+  const hasLyrics = songHasLyrics(song);
+  const hasChart = songHasChart(song);
+  if(!hasLyrics && !hasChart){
     toast('Esta canción no tiene letra ni tabla de acordes para exportar');
     return;
   }
-  setTimeout(()=>window.print(), 50); // let the DOM paint before opening the print dialog
+  const options = [];
+  if(hasLyrics) options.push({ id:'lyrics-only', label:'Solo letra' });
+  if(hasLyrics) options.push({ id:'lyrics-chords', label:'Letra con acordes' });
+  if(hasChart) options.push({ id:'chart', label:'Tabla de acordes' });
+  if(options.length === 1){ exportSongToPdf(song, options[0].id); return; }
+  const rows = options.map(o => `
+    <div class="picker-row" data-export-mode="${o.id}" style="cursor:pointer;">
+      <div class="info"><div class="t">${escapeHtml(o.label)}</div></div>
+    </div>`).join('');
+  openSheetHtml(`
+    <h2>Exportar PDF</h2>
+    <div class="hint" style="margin:-4px 0 4px;">¿Qué querés incluir?</div>
+    <div class="picker-list">${rows}</div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.querySelectorAll('[data-export-mode]').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      const mode = row.dataset.exportMode;
+      closeSheet();
+      exportSongToPdf(song, mode);
+    });
+  });
 }
 document.getElementById('btnExportPdfEditor').addEventListener('click', ()=>{
   if(!ui.editingSongId){ toast('Guarda la canción primero'); return; }
   const s = state.songs.find(x=>x.id===ui.editingSongId);
-  if(s) exportSongToPdf(s);
+  if(s) openExportPdfChooser(s);
 });
 document.getElementById('btnExportPdfPresent').addEventListener('click', ()=>{
   const s = currentPresentSong();
-  if(s) exportSongToPdf(s);
+  if(s) openExportPdfChooser(s);
 });
 
 function currentPresentSong(){
