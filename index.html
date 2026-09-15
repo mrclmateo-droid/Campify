@@ -2695,28 +2695,53 @@ document.getElementById('btnTlAddSongs').addEventListener('click', ()=>{
   const tl = state.tracklists.find(t=>t.id===ui.activeTracklistId);
   if(!tl) return;
   const available = state.songs.filter(s=>!tl.songIds.includes(s.id));
-  const rows = available.length ? available.map(s=>`
-    <label class="picker-row">
-      <input type="checkbox" value="${s.id}" style="width:20px;height:20px;">
-      <div class="info"><div class="t">${escapeHtml(s.title)}</div><div class="a">${escapeHtml(s.artist||'')}</div></div>
-    </label>`).join('') : `<div class="empty">Todas tus canciones ya están en esta lista.</div>`;
+  const selected = new Set(); // tracked separately from the DOM so it survives filter changes
+  const artists = [...new Set(available.map(s=>s.artist).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+
+  function renderRows(filterArtist){
+    const list = filterArtist ? available.filter(s=>s.artist===filterArtist) : available;
+    if(!list.length){
+      return `<div class="empty">${filterArtist ? 'Ninguna canción de ese artista para agregar.' : 'Todas tus canciones ya están en esta lista.'}</div>`;
+    }
+    return list.map(s=>`
+      <label class="picker-row">
+        <input type="checkbox" data-song-id="${s.id}" ${selected.has(s.id)?'checked':''} style="width:20px;height:20px;">
+        <div class="info"><div class="t">${escapeHtml(s.title)}</div><div class="a">${escapeHtml(s.artist||'')}</div></div>
+      </label>`).join('');
+  }
+
+  const artistOptions = ['<option value="">Todos los artistas</option>']
+    .concat(artists.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`)).join('');
+
   openSheetHtml(`
     <h2>Agregar canciones</h2>
-    <div class="picker-list">${rows}</div>
+    ${artists.length ? `<select id="addSongsArtistFilter" style="width:100%; margin-bottom:10px; background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:9px 10px; color:var(--text);">${artistOptions}</select>` : ''}
+    <div class="picker-list" id="addSongsList">${renderRows('')}</div>
     <div class="sheet-actions">
       <button class="btn ghost" id="sheetCancel" style="flex:1;">Cerrar</button>
       <button class="btn primary" id="sheetOk" style="flex:1;" ${available.length?'':'disabled'}>Agregar</button>
     </div>`);
   document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.getElementById('addSongsList').addEventListener('change', e=>{
+    const cb = e.target.closest('[data-song-id]');
+    if(!cb) return;
+    if(cb.checked) selected.add(cb.dataset.songId); else selected.delete(cb.dataset.songId);
+  });
+  const artistFilterEl = document.getElementById('addSongsArtistFilter');
+  if(artistFilterEl){
+    artistFilterEl.addEventListener('change', e=>{
+      document.getElementById('addSongsList').innerHTML = renderRows(e.target.value);
+    });
+  }
   const okBtn = document.getElementById('sheetOk');
   if(okBtn) okBtn.addEventListener('click', ()=>{
-    const checked = [...document.querySelectorAll('#sheetBody input[type=checkbox]:checked')].map(c=>c.value);
-    tl.songIds.push(...checked);
+    if(!selected.size){ toast('No seleccionaste ninguna canción'); return; }
+    tl.songIds.push(...selected);
     tl.updatedAt = todayISO();
     saveState();
     closeSheet();
     renderTracklistDetail();
-    if(checked.length) toast(checked.length + ' canción(es) agregadas');
+    toast(selected.size + ' canción(es) agregadas');
   });
 });
 
