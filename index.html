@@ -495,6 +495,21 @@ nav#tabbar .brand{display:none;}
   background:rgba(0,0,0,.72); color:#fff; font-size:22px; font-weight:700; padding:14px 22px;
   border-radius:14px; pointer-events:none;
 }
+/* Floating mini YouTube player: stays visible (as YouTube's terms require)
+   but out of the way, in a corner, so the lyrics/chart below stay usable —
+   scrolling, tapping cells, everything keeps working underneath it. */
+#youtubeMiniPlayer{
+  position:fixed; top:calc(64px + env(safe-area-inset-top)); right:10px; z-index:130;
+  width:170px; border-radius:10px; overflow:hidden; background:#000;
+  box-shadow:0 6px 20px rgba(0,0,0,.55); border:1px solid var(--border);
+}
+#youtubeMiniPlayer.hidden{display:none;}
+.youtube-mini-frame{position:relative; width:100%; padding-top:56.25%;}
+.youtube-mini-frame iframe{position:absolute; inset:0; width:100%; height:100%; border:0;}
+#btnYoutubeMiniClose{
+  position:absolute; top:4px; right:4px; z-index:2; width:22px; height:22px; border-radius:50%;
+  background:rgba(0,0,0,.65); color:#fff; border:0; font-size:12px; line-height:1; cursor:pointer;
+}
 #chromeToggleTab{
   position:fixed; left:50%; bottom:0; transform:translateX(-50%);
   width:64px; height:22px; border:1px solid var(--border); border-bottom:0; border-radius:12px 12px 0 0;
@@ -822,6 +837,10 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
   </div>
 
   <div id="lyricsViewport"><div id="lyricsContent"></div></div>
+  <div id="youtubeMiniPlayer" class="hidden">
+    <button id="btnYoutubeMiniClose" title="Cerrar">✕</button>
+    <div class="youtube-mini-frame"><iframe id="youtubeMiniIframe" src="" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>
+  </div>
   <div id="fontSizeIndicator" class="hidden"></div>
 
   <div class="present-bottombar" id="presentBottom">
@@ -3203,22 +3222,23 @@ function updateYoutubeButton(song){
   const btn = document.getElementById('btnYoutubePresent');
   btn.classList.toggle('hidden', !extractYouTubeId(song && song.youtubeUrl));
 }
-function openYoutubePlayer(song){
+function toggleYoutubeMiniPlayer(song){
+  const box = document.getElementById('youtubeMiniPlayer');
+  const isOpen = !box.classList.contains('hidden');
+  if(isOpen){ closeYoutubeMiniPlayer(); return; }
   const id = extractYouTubeId(song.youtubeUrl);
   if(!id){ toast('Este enlace de YouTube no parece válido'); return; }
-  openSheetHtml(`
-    <h2>${escapeHtml(song.title)}</h2>
-    <div style="position:relative; width:100%; padding-top:56.25%; border-radius:var(--radius); overflow:hidden; background:#000;">
-      <iframe src="https://www.youtube.com/embed/${id}?autoplay=1" style="position:absolute; inset:0; width:100%; height:100%; border:0;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-    </div>
-    <div class="sheet-actions">
-      <button class="btn primary" id="sheetOk" style="flex:1;">Cerrar</button>
-    </div>`);
-  document.getElementById('sheetOk').addEventListener('click', closeSheet);
+  document.getElementById('youtubeMiniIframe').src = `https://www.youtube.com/embed/${id}?autoplay=1`;
+  box.classList.remove('hidden');
 }
+function closeYoutubeMiniPlayer(){
+  document.getElementById('youtubeMiniPlayer').classList.add('hidden');
+  document.getElementById('youtubeMiniIframe').src = ''; // stop playback, don't just hide it
+}
+document.getElementById('btnYoutubeMiniClose').addEventListener('click', closeYoutubeMiniPlayer);
 document.getElementById('btnYoutubePresent').addEventListener('click', ()=>{
   const s = currentPresentSong();
-  if(s) openYoutubePlayer(s);
+  if(s) toggleYoutubeMiniPlayer(s);
 });
 
 function loadPresentSong(){
@@ -3232,6 +3252,7 @@ function loadPresentSong(){
   document.getElementById('pKey').textContent = s.key ? transposeChordLine(s.key, s.transpose||0) : '—';
   document.getElementById('pCapo').textContent = s.capo ? ('Capo ' + s.capo) : 'Sin capo';
   updateYoutubeButton(s);
+  closeYoutubeMiniPlayer();
 
   const hasLyrics = !!(s.lyrics && s.lyrics.trim());
   const hasChart = !!(s.chordChart && s.chordChart.sections && s.chordChart.sections.length);
@@ -3484,6 +3505,7 @@ function closePresentSilently(){
   pausePlayback();
   releaseWakeLock();
   clearMetronome();
+  closeYoutubeMiniPlayer();
 }
 
 /* ---- navigation within queue ---- */
