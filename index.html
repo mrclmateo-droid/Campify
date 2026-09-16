@@ -222,25 +222,28 @@ nav#tabbar .brand{display:none;}
   padding-bottom:calc(8px + env(safe-area-inset-bottom));
   background:var(--bg-elev); border-top:1px solid var(--border); flex:none;
 }
-.chart-cell.editing{padding:6px 2px; background:var(--bg-elev-2);}
+.chart-cell.editing{padding:24px 4px; background:var(--bg-elev-2); border-radius:6px;}
 .chart-cell-inline-input{
   width:100%; background:none; border:0; outline:none; text-align:center;
   font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--accent);
   padding:0;
 }
 .chart-cell-inline-input:focus{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;}
-.chart-cell.editing{
-  transform:scale(1.2); z-index:5; box-shadow:0 6px 16px rgba(0,0,0,.45); border-radius:6px;
+.chart-cell.editing .chart-cell-inline-input{font-size:30px;}
+/* A fixed-position popup (not nested inside the scrolling grid pane) so it
+   can never get edge-clipped the way a transform/overflow trick could —
+   the same clipping issue that made the "bigger cell" effect invisible. */
+#chordCandidatesPopup{
+  position:fixed; z-index:200; background:var(--bg-elev-2); border:1px solid var(--border);
+  border-radius:10px; padding:6px; box-shadow:0 8px 22px rgba(0,0,0,.5);
+  display:flex; flex-direction:column; gap:2px; min-width:110px;
 }
-#chordSuggestionBar{
-  padding:9px 12px; background:var(--bg-elev-2); border-top:1px solid var(--border);
-  font-size:13px; color:var(--text-dim); display:flex; align-items:center; justify-content:space-between; gap:10px; flex:none;
+#chordCandidatesPopup.hidden{display:none;}
+#chordCandidatesPopup button{
+  background:none; border:0; color:var(--text); font-family:var(--font-mono); font-weight:700;
+  font-size:17px; padding:9px 12px; border-radius:7px; text-align:left; cursor:pointer; width:100%;
 }
-#chordSuggestionBar.hidden{display:none;}
-#chordSuggestionBar button{
-  background:var(--accent); color:var(--accent-ink); border:0; border-radius:8px;
-  padding:6px 12px; font-weight:600; font-size:13px; flex:none; cursor:pointer;
-}
+#chordCandidatesPopup button:active{background:var(--bg-elev-3);}
 .cell-editor-label{font-size:11px; color:var(--text-dim); font-weight:600; letter-spacing:.02em; text-transform:uppercase;}
 .cell-editor-ending-btns{display:flex; gap:8px; flex:1;}
 .cell-editor-ending-btns .btn.active{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
@@ -1000,12 +1003,12 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <button type="button" class="btn" id="btnCellInsertAfter">+ Compás después</button>
       </div>
     </div>
-    <div id="chordSuggestionBar" class="hidden"></div>
     <div class="cell-edit-bar" id="cellEditBar">
       <button type="button" class="btn icon" id="btnCellPaletteToggle" title="Símbolos">🎹</button>
       <button type="button" class="btn primary" id="btnCellDone">Listo</button>
     </div>
   </div>
+  <div id="chordCandidatesPopup" class="hidden"></div>
 </div>
 
 <!-- ============ GENERIC MODAL SHEET ============ -->
@@ -1090,38 +1093,33 @@ function levenshteinDistance(a, b){
   }
   return dp[m][n];
 }
-// Returns a corrected token, or null if `tok` is already fine (or too
-// unlike a chord at all to guess confidently — never forces a suggestion
-// on something that might not be a chord attempt in the first place).
-function suggestChordToken(tok){
-  if(!tok || isMeasureSpecial(tok)) return null;
+// Returns up to 4 ranked corrected tokens (closest real qualities first),
+// or an empty array if `tok` is already fine (or too unlike a chord to
+// guess confidently at all — never forces a match on something that might
+// not be a chord attempt in the first place).
+function suggestChordCandidates(tok){
+  if(!tok || isMeasureSpecial(tok)) return [];
   const m = tok.match(/^([A-Ga-g])([#b]?)([^\/]*)(\/([A-Ga-g])([#b]?))?$/);
-  if(!m) return null;
+  if(!m) return [];
   const root = m[1].toUpperCase();
   const acc = m[2] || '';
   const quality = m[3] || '';
   const bass = m[4] || '';
-  if(KNOWN_CHORD_QUALITIES.includes(quality)) return null; // already real, nothing to fix
-  let best = null, bestDist = Infinity;
-  KNOWN_CHORD_QUALITIES.forEach(q=>{
-    const d = levenshteinDistance(quality, q);
-    if(d < bestDist){ bestDist = d; best = q; }
-  });
-  if(best === null || bestDist > Math.max(2, Math.ceil(quality.length*0.6))) return null; // too different to guess confidently
-  return root + acc + best + bass;
+  if(KNOWN_CHORD_QUALITIES.includes(quality)) return []; // already real, nothing to fix
+  const maxDist = Math.max(3, Math.ceil(quality.length*0.8));
+  return KNOWN_CHORD_QUALITIES
+    .map(q => ({ q, d: levenshteinDistance(quality, q) }))
+    .filter(x => x.d <= maxDist)
+    .sort((a,b) => a.d - b.d)
+    .slice(0, 4)
+    .map(x => root + acc + x.q + bass);
 }
-// Checks every space-separated chord in the cell (a measure can hold more
-// than one) and returns a corrected full string, or null if nothing needed fixing.
-function suggestFullCorrection(text){
+// True only when EVERY space-separated chord in the measure is a real,
+// recognized chord — the "safe to flow to the next cell on its own" check.
+function isFullyValidChordText(text){
   const tokens = (text||'').trim().split(/\s+/).filter(Boolean);
-  if(!tokens.length) return null;
-  let changed = false;
-  const corrected = tokens.map(t=>{
-    const s = suggestChordToken(t);
-    if(s){ changed = true; return s; }
-    return t;
-  });
-  return changed ? corrected.join(' ') : null;
+  if(!tokens.length) return false;
+  return tokens.every(t => isMeasureSpecial(t) || isChordToken(t));
 }
 
 function isChordLine(line){
@@ -2332,9 +2330,9 @@ function injectCellInput(sectionIdx, measureIdx, text){
   cellEl.classList.add('editing');
   cellEl.innerHTML = `<input type="text" class="chart-cell-inline-input" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" value="${escapeHtml(text||'')}">`;
   const inp = cellEl.querySelector('input');
-  inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); advanceToNextCell(); } });
-  inp.addEventListener('input', ()=>checkChordSuggestion(inp));
-  hideChordSuggestion();
+  inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); clearTimeout(cellPauseTimer); advanceToNextCell(); } });
+  inp.addEventListener('input', ()=>scheduleCellPauseCheck(inp));
+  hideChordCandidatesPopup();
   return inp;
 }
 function activeCellInput(){ return document.querySelector('.chart-cell.editing input'); }
@@ -2369,7 +2367,8 @@ function closeCellEditBar(){
   if(cellEditCtx) commitCellEdit();
   document.getElementById('cellEditDock').classList.add('hidden');
   document.getElementById('cellPaletteSheet').classList.add('hidden');
-  hideChordSuggestion();
+  hideChordCandidatesPopup();
+  clearTimeout(cellPauseTimer);
   cellEditCtx = null;
 }
 // Enter commits the current cell and jumps straight into the next one, so
@@ -2393,7 +2392,7 @@ document.getElementById('btnCellDone').addEventListener('click', closeCellEditBa
 // dismissing any other text field on tap-away.
 document.addEventListener('pointerdown', e=>{
   if(!cellEditCtx) return;
-  if(e.target.closest('.chart-cell.editing') || e.target.closest('#cellEditDock') || e.target.closest('#cellPaletteSheet')) return;
+  if(e.target.closest('.chart-cell.editing') || e.target.closest('#cellEditDock') || e.target.closest('#cellPaletteSheet') || e.target.closest('#chordCandidatesPopup')) return;
   if(e.target.closest('[data-cell-section]')) return; // switching cells is handled by the click handler above
   closeCellEditBar();
 });
@@ -2411,35 +2410,61 @@ document.getElementById('btnCellEnd2').addEventListener('click', ()=>{ cellEndin
 // so the two don't fight for screen space, matching a real custom keyboard.
 // "¿Quisiste decir...?" — checked a short beat after typing stops (not on
 // every keystroke, since a half-typed chord is expected to look "wrong").
-let chordSuggestionTimer = null, chordSuggestionValue = null;
-function checkChordSuggestion(input){
-  clearTimeout(chordSuggestionTimer);
-  chordSuggestionTimer = setTimeout(()=>{
-    const suggestion = suggestFullCorrection(input.value);
-    const bar = document.getElementById('chordSuggestionBar');
-    if(suggestion){
-      chordSuggestionValue = suggestion;
-      bar.innerHTML = `<span>¿Quisiste decir <b style="color:var(--accent);">${escapeHtml(suggestion)}</b>?</span><button type="button" id="btnAcceptSuggestion">Usar</button>`;
-      bar.classList.remove('hidden');
-    } else {
-      hideChordSuggestion();
+// Pencil (Scribble) input never shows a keyboard, so there's no "Enter" or
+// "Listo" naturally at hand — this instead reacts to a short pause after
+// writing, like moving your hand to the next box on paper:
+//   - the cell already reads as a complete, real chord -> flow onward on its own
+//   - it's close to a real chord but not quite -> pop up to 4 nearby matches
+//     right from the cell, tap one to fix it (then it re-checks and flows)
+//   - neither -> leave it alone, might still be mid-word
+let cellPauseTimer = null;
+function scheduleCellPauseCheck(input){
+  clearTimeout(cellPauseTimer);
+  hideChordCandidatesPopup();
+  cellPauseTimer = setTimeout(()=>{
+    const text = input.value.trim();
+    if(!text) return;
+    if(isFullyValidChordText(text)){
+      advanceToNextCell();
+      return;
     }
-  }, 450);
+    const tokens = text.split(/\s+/).filter(Boolean);
+    const lastTok = tokens[tokens.length-1];
+    const candidates = suggestChordCandidates(lastTok);
+    if(candidates.length){
+      const cellEl = input.closest('.chart-cell');
+      showChordCandidatesPopup(cellEl, candidates, chosen=>{
+        tokens[tokens.length-1] = chosen;
+        input.value = tokens.join(' ');
+        hideChordCandidatesPopup();
+        if(isFullyValidChordText(input.value)) advanceToNextCell();
+        else { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+      });
+    }
+  }, 700);
 }
-function hideChordSuggestion(){
-  clearTimeout(chordSuggestionTimer);
-  document.getElementById('chordSuggestionBar').classList.add('hidden');
-  chordSuggestionValue = null;
+function showChordCandidatesPopup(cellEl, candidates, onPick){
+  const popup = document.getElementById('chordCandidatesPopup');
+  if(!cellEl || !candidates.length){ popup.classList.add('hidden'); return; }
+  popup.innerHTML = candidates.map(c=>`<button type="button" data-candidate="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('');
+  popup.classList.remove('hidden');
+  const rect = cellEl.getBoundingClientRect();
+  popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - popup.offsetWidth - 8)) + 'px';
+  popup.style.top = (rect.bottom + 6) + 'px';
+  // If that would land under the edit dock at the bottom, show it above the cell instead.
+  const popupHeight = popup.offsetHeight;
+  if(rect.bottom + 6 + popupHeight > window.innerHeight - 90){
+    popup.style.top = Math.max(8, rect.top - popupHeight - 6) + 'px';
+  }
+  popup.onclick = e=>{
+    const btn = e.target.closest('[data-candidate]');
+    if(btn) onPick(btn.dataset.candidate);
+  };
 }
-document.getElementById('chordSuggestionBar').addEventListener('click', e=>{
-  if(!e.target.closest('#btnAcceptSuggestion') || !chordSuggestionValue) return;
-  const inp = activeCellInput();
-  if(!inp) return;
-  inp.value = chordSuggestionValue;
-  inp.focus();
-  inp.setSelectionRange(inp.value.length, inp.value.length);
-  hideChordSuggestion();
-});
+function hideChordCandidatesPopup(){
+  clearTimeout(cellPauseTimer);
+  document.getElementById('chordCandidatesPopup').classList.add('hidden');
+}
 
 document.getElementById('btnCellPaletteToggle').addEventListener('click', ()=>{
   const sheet = document.getElementById('cellPaletteSheet');
