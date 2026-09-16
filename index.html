@@ -229,6 +229,18 @@ nav#tabbar .brand{display:none;}
   padding:0;
 }
 .chart-cell-inline-input:focus{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;}
+.chart-cell.editing{
+  transform:scale(1.2); z-index:5; box-shadow:0 6px 16px rgba(0,0,0,.45); border-radius:6px;
+}
+#chordSuggestionBar{
+  padding:9px 12px; background:var(--bg-elev-2); border-top:1px solid var(--border);
+  font-size:13px; color:var(--text-dim); display:flex; align-items:center; justify-content:space-between; gap:10px; flex:none;
+}
+#chordSuggestionBar.hidden{display:none;}
+#chordSuggestionBar button{
+  background:var(--accent); color:var(--accent-ink); border:0; border-radius:8px;
+  padding:6px 12px; font-weight:600; font-size:13px; flex:none; cursor:pointer;
+}
 .cell-editor-label{font-size:11px; color:var(--text-dim); font-weight:600; letter-spacing:.02em; text-transform:uppercase;}
 .cell-editor-ending-btns{display:flex; gap:8px; flex:1;}
 .cell-editor-ending-btns .btn.active{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
@@ -988,6 +1000,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <button type="button" class="btn" id="btnCellInsertAfter">+ Compás después</button>
       </div>
     </div>
+    <div id="chordSuggestionBar" class="hidden"></div>
     <div class="cell-edit-bar" id="cellEditBar">
       <button type="button" class="btn icon" id="btnCellPaletteToggle" title="Símbolos">🎹</button>
       <button type="button" class="btn primary" id="btnCellDone">Listo</button>
@@ -1047,6 +1060,69 @@ NOTES_FLAT.forEach((n,i)=>NOTE_INDEX[n]=i);
 const CHORD_TOKEN_RE = /^([A-G])([#b]?)((?:maj|min|dim|aug|sus|add|m|M|[#b]|\d)*)(\/([A-G])([#b]?))?$/;
 
 function isChordToken(tok){ return CHORD_TOKEN_RE.test(tok); }
+
+/* ---- "closest real chord" suggestion for the cell editor ----
+   isChordToken()/CHORD_TOKEN_RE above are deliberately loose (any mix of
+   maj/min/dim/.../digits passes, since transposition just needs to not choke
+   on a weird-but-real extension). For catching actual typos we need the
+   opposite: a curated list of qualities that are real chords, so something
+   off that list gets compared against all of them and the closest one wins. */
+const KNOWN_CHORD_QUALITIES = [
+  '', 'm', '5', '6', '7', '9', '11', '13',
+  'm6', 'm7', 'm9', 'm11', 'm13', 'mM7',
+  'M', 'M7', 'M9', 'M11', 'M13',
+  'maj', 'maj7', 'maj9', 'maj11', 'maj13',
+  'min', 'min6', 'min7', 'min9',
+  'dim', 'dim7', 'aug', 'aug7',
+  'sus2', 'sus4', '7sus4',
+  'add9', 'add11', 'madd9',
+  '6/9', '7b5', '7#5', '7b9', '7#9', 'm7b5'
+];
+function levenshteinDistance(a, b){
+  const m = a.length, n = b.length;
+  const dp = [];
+  for(let i=0;i<=m;i++){ dp.push([i]); }
+  for(let j=1;j<=n;j++){ dp[0][j] = j; }
+  for(let i=1;i<=m;i++){
+    for(let j=1;j<=n;j++){
+      dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    }
+  }
+  return dp[m][n];
+}
+// Returns a corrected token, or null if `tok` is already fine (or too
+// unlike a chord at all to guess confidently — never forces a suggestion
+// on something that might not be a chord attempt in the first place).
+function suggestChordToken(tok){
+  if(!tok || isMeasureSpecial(tok)) return null;
+  const m = tok.match(/^([A-Ga-g])([#b]?)([^\/]*)(\/([A-Ga-g])([#b]?))?$/);
+  if(!m) return null;
+  const root = m[1].toUpperCase();
+  const acc = m[2] || '';
+  const quality = m[3] || '';
+  const bass = m[4] || '';
+  if(KNOWN_CHORD_QUALITIES.includes(quality)) return null; // already real, nothing to fix
+  let best = null, bestDist = Infinity;
+  KNOWN_CHORD_QUALITIES.forEach(q=>{
+    const d = levenshteinDistance(quality, q);
+    if(d < bestDist){ bestDist = d; best = q; }
+  });
+  if(best === null || bestDist > Math.max(2, Math.ceil(quality.length*0.6))) return null; // too different to guess confidently
+  return root + acc + best + bass;
+}
+// Checks every space-separated chord in the cell (a measure can hold more
+// than one) and returns a corrected full string, or null if nothing needed fixing.
+function suggestFullCorrection(text){
+  const tokens = (text||'').trim().split(/\s+/).filter(Boolean);
+  if(!tokens.length) return null;
+  let changed = false;
+  const corrected = tokens.map(t=>{
+    const s = suggestChordToken(t);
+    if(s){ changed = true; return s; }
+    return t;
+  });
+  return changed ? corrected.join(' ') : null;
+}
 
 function isChordLine(line){
   const trimmed = line.trim();
@@ -2256,7 +2332,9 @@ function injectCellInput(sectionIdx, measureIdx, text){
   cellEl.classList.add('editing');
   cellEl.innerHTML = `<input type="text" class="chart-cell-inline-input" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" value="${escapeHtml(text||'')}">`;
   const inp = cellEl.querySelector('input');
-  inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); closeCellEditBar(); } });
+  inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); advanceToNextCell(); } });
+  inp.addEventListener('input', ()=>checkChordSuggestion(inp));
+  hideChordSuggestion();
   return inp;
 }
 function activeCellInput(){ return document.querySelector('.chart-cell.editing input'); }
@@ -2291,7 +2369,24 @@ function closeCellEditBar(){
   if(cellEditCtx) commitCellEdit();
   document.getElementById('cellEditDock').classList.add('hidden');
   document.getElementById('cellPaletteSheet').classList.add('hidden');
+  hideChordSuggestion();
   cellEditCtx = null;
+}
+// Enter commits the current cell and jumps straight into the next one, so
+// filling in a whole row is type → Enter → type → Enter, never touching
+// "Listo" until the very last cell.
+function advanceToNextCell(){
+  if(!cellEditCtx) return;
+  const { sectionIdx, measureIdx } = cellEditCtx;
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[sectionIdx];
+  if(section && measureIdx + 1 < section.measures.length){
+    openCellEdit(sectionIdx, measureIdx + 1); // commits the current cell internally, then opens the next
+  } else if(chart.sections[sectionIdx+1] && chart.sections[sectionIdx+1].measures.length){
+    openCellEdit(sectionIdx+1, 0);
+  } else {
+    closeCellEditBar(); // no more cells to advance to
+  }
 }
 document.getElementById('btnCellDone').addEventListener('click', closeCellEditBar);
 // Tapping fully outside the cell/dock/palette also finishes editing, like
@@ -2314,6 +2409,38 @@ document.getElementById('btnCellEnd2').addEventListener('click', ()=>{ cellEndin
 // The "🎹" button toggles the symbol sheet in place of the OS keyboard —
 // inputmode="none" suppresses the native keyboard while the sheet is open
 // so the two don't fight for screen space, matching a real custom keyboard.
+// "¿Quisiste decir...?" — checked a short beat after typing stops (not on
+// every keystroke, since a half-typed chord is expected to look "wrong").
+let chordSuggestionTimer = null, chordSuggestionValue = null;
+function checkChordSuggestion(input){
+  clearTimeout(chordSuggestionTimer);
+  chordSuggestionTimer = setTimeout(()=>{
+    const suggestion = suggestFullCorrection(input.value);
+    const bar = document.getElementById('chordSuggestionBar');
+    if(suggestion){
+      chordSuggestionValue = suggestion;
+      bar.innerHTML = `<span>¿Quisiste decir <b style="color:var(--accent);">${escapeHtml(suggestion)}</b>?</span><button type="button" id="btnAcceptSuggestion">Usar</button>`;
+      bar.classList.remove('hidden');
+    } else {
+      hideChordSuggestion();
+    }
+  }, 450);
+}
+function hideChordSuggestion(){
+  clearTimeout(chordSuggestionTimer);
+  document.getElementById('chordSuggestionBar').classList.add('hidden');
+  chordSuggestionValue = null;
+}
+document.getElementById('chordSuggestionBar').addEventListener('click', e=>{
+  if(!e.target.closest('#btnAcceptSuggestion') || !chordSuggestionValue) return;
+  const inp = activeCellInput();
+  if(!inp) return;
+  inp.value = chordSuggestionValue;
+  inp.focus();
+  inp.setSelectionRange(inp.value.length, inp.value.length);
+  hideChordSuggestion();
+});
+
 document.getElementById('btnCellPaletteToggle').addEventListener('click', ()=>{
   const sheet = document.getElementById('cellPaletteSheet');
   const inp = activeCellInput();
