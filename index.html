@@ -222,13 +222,13 @@ nav#tabbar .brand{display:none;}
   padding-bottom:calc(8px + env(safe-area-inset-bottom));
   background:var(--bg-elev); border-top:1px solid var(--border); flex:none;
 }
-.chart-cell.editing{padding:24px 4px; background:var(--bg-elev-2); border-radius:6px;}
+.chart-cell.editing{padding:24px 4px; background:var(--bg-elev-2); border-radius:6px; box-shadow:inset 0 0 0 2px var(--accent);}
 .chart-cell-inline-input{
   width:100%; background:none; border:0; outline:none; text-align:center;
   font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--accent);
   padding:0;
 }
-.chart-cell-inline-input:focus{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;}
+.chart-cell-inline-input:focus{outline:none;}
 .chart-cell.editing .chart-cell-inline-input{font-size:30px;}
 /* A fixed-position popup (not nested inside the scrolling grid pane) so it
    can never get edge-clipped the way a transform/overflow trick could —
@@ -2328,7 +2328,7 @@ function injectCellInput(sectionIdx, measureIdx, text){
   const cellEl = document.querySelector(`[data-cell-section="${sectionIdx}"][data-cell-measure="${measureIdx}"]`);
   if(!cellEl) return null;
   cellEl.classList.add('editing');
-  cellEl.innerHTML = `<input type="text" class="chart-cell-inline-input" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" value="${escapeHtml(text||'')}">`;
+  cellEl.innerHTML = `<input type="text" class="chart-cell-inline-input" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="words" value="${escapeHtml(text||'')}">`;
   const inp = cellEl.querySelector('input');
   inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); clearTimeout(cellPauseTimer); advanceToNextCell(); } });
   inp.addEventListener('input', ()=>scheduleCellPauseCheck(inp));
