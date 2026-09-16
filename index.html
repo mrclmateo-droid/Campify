@@ -682,6 +682,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         </div>
         <div class="row" style="margin-bottom:14px;">
           <button class="btn" id="btnTlAddSongs"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Agregar canciones</button>
+          <button class="btn" id="btnTlExport" title="Exportar solo esta lista"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 9l5-5 5 5M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg> Exportar lista</button>
           <button class="btn primary" id="btnTlPlay"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8V4z"/></svg> Reproducir</button>
         </div>
         <div id="tlItems" class="tl-items"></div>
@@ -816,6 +817,10 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <div class="settings-row">
           <div><div class="label">Exportar biblioteca</div><div class="desc">Descarga canciones y tracklists en JSON</div></div>
           <button class="btn small" id="btnExport">Exportar</button>
+        </div>
+        <div class="settings-row">
+          <div><div class="label">Exportar canciones específicas</div><div class="desc">Elegí solo algunas, en vez de toda la biblioteca</div></div>
+          <button class="btn small" id="btnExportSpecific">Elegir</button>
         </div>
         <div class="settings-row">
           <div><div class="label">Unificar artistas</div><div class="desc">Agrupa variantes del mismo artista ("The Beatles" / "Beatles" / "Los Beatles")</div></div>
@@ -2919,6 +2924,15 @@ document.getElementById('btnTlPlay').addEventListener('click', ()=>{
   openPresent(tl.songIds[0], tl.id);
 });
 
+document.getElementById('btnTlExport').addEventListener('click', async ()=>{
+  const tl = state.tracklists.find(t=>t.id===ui.activeTracklistId);
+  if(!tl) return;
+  const songs = tl.songIds.map(id=>state.songs.find(s=>s.id===id)).filter(Boolean);
+  if(!songs.length){ toast('Esta lista no tiene canciones para exportar'); return; }
+  const filename = (tl.name||'lista').replace(/[^\w\-]+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.json';
+  await shareOrDownloadJson({ songs, tracklists:[tl] }, filename);
+  toast('Lista exportada');
+});
 document.getElementById('btnTlAddSongs').addEventListener('click', ()=>{
   const tl = state.tracklists.find(t=>t.id===ui.activeTracklistId);
   if(!tl) return;
@@ -3331,15 +3345,78 @@ function openDuplicatesSheet(){
 }
 document.getElementById('btnFindDuplicates').addEventListener('click', openDuplicatesSheet);
 
-document.getElementById('btnExport').addEventListener('click', ()=>{
-  const data = JSON.stringify({songs:state.songs, tracklists:state.tracklists}, null, 2);
-  const blob = new Blob([data], {type:'application/json'});
+// Tries the device's native share sheet first (AirDrop, Mensajes, Guardar en
+// Archivos, etc.) so the file can go straight to another device without a
+// manual download-then-move step; falls back to a normal download link
+// wherever Web Share isn't available (most desktop browsers).
+async function shareOrDownloadJson(dataObj, filename){
+  const json = JSON.stringify(dataObj, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  try{
+    const file = new File([blob], filename, {type:'application/json'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title: filename});
+      return;
+    }
+  }catch(err){
+    if(err.name === 'AbortError') return; // person cancelled the share sheet — don't also force a download
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'cancionero-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+document.getElementById('btnExport').addEventListener('click', async ()=>{
+  const filename = 'cancionero-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  await shareOrDownloadJson({songs:state.songs, tracklists:state.tracklists}, filename);
   toast('Biblioteca exportada');
+});
+document.getElementById('btnExportSpecific').addEventListener('click', ()=>{
+  const selected = new Set();
+  const artists = [...new Set(state.songs.map(s=>s.artist).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+
+  function renderRows(filterArtist){
+    const list = filterArtist ? state.songs.filter(s=>s.artist===filterArtist) : state.songs;
+    if(!list.length) return `<div class="empty">No hay canciones.</div>`;
+    return list.map(s=>`
+      <label class="picker-row" style="cursor:pointer;">
+        <input type="checkbox" data-export-song-id="${s.id}" ${selected.has(s.id)?'checked':''} style="margin-right:10px; flex:none;">
+        <div class="info"><div class="t">${escapeHtml(s.title)}</div><div class="a">${escapeHtml(s.artist||'')}</div></div>
+      </label>`).join('');
+  }
+  const artistOptions = ['<option value="">Todos los artistas</option>']
+    .concat(artists.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`)).join('');
+
+  openSheetHtml(`
+    <h2>Exportar canciones específicas</h2>
+    ${artists.length ? `<select id="exportSongsArtistFilter" style="width:100%; margin-bottom:10px; background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:9px 10px; color:var(--text);">${artistOptions}</select>` : ''}
+    <div class="picker-list" id="exportSongsList" style="max-height:50vh; overflow-y:auto;">${renderRows('')}</div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cerrar</button>
+      <button class="btn primary" id="btnDoExportSpecific" style="flex:1;">Exportar (0)</button>
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.getElementById('exportSongsList').addEventListener('change', e=>{
+    const cb = e.target.closest('[data-export-song-id]');
+    if(!cb) return;
+    if(cb.checked) selected.add(cb.dataset.exportSongId); else selected.delete(cb.dataset.exportSongId);
+    document.getElementById('btnDoExportSpecific').textContent = `Exportar (${selected.size})`;
+  });
+  const artistFilterEl = document.getElementById('exportSongsArtistFilter');
+  if(artistFilterEl){
+    artistFilterEl.addEventListener('change', e=>{
+      document.getElementById('exportSongsList').innerHTML = renderRows(e.target.value);
+    });
+  }
+  document.getElementById('btnDoExportSpecific').addEventListener('click', async ()=>{
+    if(!selected.size){ toast('No seleccionaste ninguna canción'); return; }
+    const songs = state.songs.filter(s=>selected.has(s.id));
+    const filename = 'canciones-' + new Date().toISOString().slice(0,10) + '.json';
+    closeSheet();
+    await shareOrDownloadJson({ songs, tracklists:[] }, filename);
+    toast(songs.length + ' canción(es) exportadas');
+  });
 });
 document.getElementById('btnImport').addEventListener('click', ()=> document.getElementById('fileImport').click());
 document.getElementById('fileImport').addEventListener('change', e=>{
