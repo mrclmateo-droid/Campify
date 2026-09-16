@@ -3019,11 +3019,16 @@ function findArtistGroups(){
 }
 function openUnifyArtistsSheet(){
   const groups = findArtistGroups();
-  if(!groups.length){
-    toast('No se encontraron variantes de artista para unificar');
-    return;
-  }
-  const rows = groups.map((variants, gi) => {
+  const allArtistCounts = {};
+  state.songs.forEach(s=>{
+    const a = (s.artist||'').trim();
+    if(a) allArtistCounts[a] = (allArtistCounts[a]||0) + 1;
+  });
+  const allArtists = Object.entries(allArtistCounts)
+    .map(([name,count])=>({name,count}))
+    .sort((a,b)=> a.name.localeCompare(b.name));
+
+  const autoRows = groups.map((variants, gi) => {
     const suggested = variants[0].name; // most-used variant, pre-filled as the default
     const variantList = variants.map(v=>`${escapeHtml(v.name)} (${v.count})`).join(' · ');
     return `
@@ -3035,31 +3040,75 @@ function openUnifyArtistsSheet(){
         </div>
       </div>`;
   }).join('');
+
+  const manualRows = allArtists.map((a, ai) => `
+    <label class="picker-row" style="cursor:pointer;">
+      <input type="checkbox" data-manual-artist-idx="${ai}" style="margin-right:10px; flex:none;">
+      <div class="info"><div class="t">${escapeHtml(a.name)}</div><div class="a">${a.count} canción(es)</div></div>
+    </label>`).join('');
+
   openSheetHtml(`
     <h2>Unificar artistas</h2>
-    <div class="hint" style="margin:-4px 0 8px;">Se encontraron variantes del mismo artista. Elegí el nombre correcto (o escribí otro) y confirmá cada grupo por separado — nada se cambia hasta que lo confirmes.</div>
-    <div id="artistGroupsList" style="max-height:55vh; overflow-y:auto;">${rows}</div>
+    ${groups.length ? `
+      <div class="hint" style="margin:-4px 0 8px;">Se encontraron variantes del mismo artista. Elegí el nombre correcto (o escribí otro) y confirmá cada grupo por separado.</div>
+      <div id="artistGroupsList" style="max-height:32vh; overflow-y:auto; margin-bottom:16px;">${autoRows}</div>
+    ` : `<div class="hint" style="margin:-4px 0 16px;">No se encontraron variantes automáticas — pero podés unir cualquier combinación a mano abajo.</div>`}
+    <h2 style="margin-top:4px;">Unir manualmente</h2>
+    <div class="hint" style="margin:-4px 0 8px;">Marcá dos o más artistas para unirlos en uno solo, aunque el buscador automático no los haya agrupado.</div>
+    <div id="manualArtistList" style="max-height:32vh; overflow-y:auto;">${manualRows}</div>
+    <div class="row" style="gap:8px; margin-top:10px;">
+      <input type="text" id="manualUnifyName" placeholder="Nombre final" style="flex:1; background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:9px 10px; color:var(--text);">
+      <button type="button" class="btn primary" id="btnManualUnify">Unir</button>
+    </div>
     <div class="sheet-actions">
       <button class="btn ghost" id="sheetCancel" style="flex:1;">Cerrar</button>
     </div>`);
   document.getElementById('sheetCancel').addEventListener('click', closeSheet);
-  document.getElementById('artistGroupsList').addEventListener('click', e=>{
-    const btn = e.target.closest('[data-unify-idx]');
-    if(!btn) return;
-    const gi = Number(btn.dataset.unifyIdx);
-    const input = document.querySelector(`.artist-unify-input[data-group-idx="${gi}"]`);
-    const canonical = input.value.trim();
-    if(!canonical){ toast('Escribe un nombre'); return; }
-    const variantNames = new Set(groups[gi].map(v=>v.name));
+
+  const artistGroupsListEl = document.getElementById('artistGroupsList');
+  if(artistGroupsListEl){
+    artistGroupsListEl.addEventListener('click', e=>{
+      const btn = e.target.closest('[data-unify-idx]');
+      if(!btn) return;
+      const gi = Number(btn.dataset.unifyIdx);
+      const input = document.querySelector(`.artist-unify-input[data-group-idx="${gi}"]`);
+      const canonical = input.value.trim();
+      if(!canonical){ toast('Escribe un nombre'); return; }
+      const variantNames = new Set(groups[gi].map(v=>v.name));
+      let changed = 0;
+      state.songs.forEach(s=>{
+        if(variantNames.has((s.artist||'').trim())){ s.artist = canonical; changed++; }
+      });
+      saveState();
+      renderLibrary();
+      toast(`${changed} canción(es) actualizadas a "${canonical}"`);
+      openUnifyArtistsSheet(); // refresh both lists from the updated state
+    });
+  }
+
+  const selectedManual = new Set();
+  document.getElementById('manualArtistList').addEventListener('change', e=>{
+    const cb = e.target.closest('[data-manual-artist-idx]');
+    if(!cb) return;
+    const name = allArtists[Number(cb.dataset.manualArtistIdx)].name;
+    if(cb.checked) selectedManual.add(name); else selectedManual.delete(name);
+    // Pre-fill the name field with the first thing checked, purely as a
+    // starting point — the person can still type something else entirely.
+    const nameField = document.getElementById('manualUnifyName');
+    if(cb.checked && !nameField.value.trim()) nameField.value = name;
+  });
+  document.getElementById('btnManualUnify').addEventListener('click', ()=>{
+    if(selectedManual.size < 2){ toast('Marcá al menos dos artistas para unir'); return; }
+    const canonical = document.getElementById('manualUnifyName').value.trim();
+    if(!canonical){ toast('Escribe el nombre final'); return; }
     let changed = 0;
     state.songs.forEach(s=>{
-      if(variantNames.has((s.artist||'').trim())){ s.artist = canonical; changed++; }
+      if(selectedManual.has((s.artist||'').trim())){ s.artist = canonical; changed++; }
     });
     saveState();
     renderLibrary();
     toast(`${changed} canción(es) actualizadas a "${canonical}"`);
-    const rowEl = document.querySelector(`.artist-group-row[data-group-idx="${gi}"]`);
-    if(rowEl) rowEl.remove();
+    openUnifyArtistsSheet(); // refresh both lists from the updated state
   });
 }
 document.getElementById('btnUnifyArtists').addEventListener('click', openUnifyArtistsSheet);
