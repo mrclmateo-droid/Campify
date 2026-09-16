@@ -268,6 +268,12 @@ nav#tabbar .brand{display:none;}
 .chart-repeat-tag{font-size:12px; font-weight:700; color:var(--accent); flex:none;}
 .chart-dup-btn{border:1px solid var(--border); background:var(--bg-elev-2); color:var(--text-dim); border-radius:6px; width:28px; height:28px; font-size:14px; cursor:pointer; flex:none;}
 .chart-dup-btn:hover{color:var(--text); border-color:var(--text-faint);}
+.chart-addline-btn{
+  display:block; width:100%; margin-top:6px; padding:10px; border:1px dashed var(--border);
+  border-radius:8px; background:none; color:var(--text-dim); font-size:13px; cursor:pointer;
+}
+.chart-addline-btn:active{background:var(--bg-elev-2);}
+.chart-empty-state{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; text-align:center;}
 .chart-section-actions{display:flex; gap:4px;}
 
 /* ---- Presentation-mode chart: real-book style ---- */
@@ -698,7 +704,13 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <div class="field"><label for="fCapo">Capo</label><input type="number" id="fCapo" min="0" max="11" placeholder="0"></div>
         <div class="field"><label for="fNotes">Notas (opcional)</label><input type="text" id="fNotes" placeholder="Subir tono en el puente…"></div>
       </div>
-      <div class="field"><label for="fYoutube">Enlace de YouTube (opcional)</label><input type="text" id="fYoutube" placeholder="https://youtube.com/watch?v=…" inputmode="url"></div>
+      <div class="field">
+        <label for="fYoutube">Enlace de YouTube (opcional)</label>
+        <div class="row" style="gap:8px;">
+          <input type="text" id="fYoutube" placeholder="https://youtube.com/watch?v=…" inputmode="url" style="flex:1;">
+          <button type="button" class="btn small" id="btnSearchYoutube" title="Buscar esta canción en YouTube">Buscar</button>
+        </div>
+      </div>
       <div class="field">
         <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
           <label for="fLyrics" style="margin:0;">Letra y acordes</label>
@@ -938,7 +950,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
   </div>
   <div class="chart-editor-body hidden" id="chartTextBody">
     <div class="chart-editor-pane" style="flex:1;">
-      <textarea id="fChartText" spellcheck="false" placeholder="[A]&#10;C | CM7 | C7 | F&#10;Fm6 | C | D7 | CM7(1)&#10;C(2)&#10;&#10;[B: Melo]&#10;Dm | G | C | %"></textarea>
+      <textarea id="fChartText" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="[A]&#10;C | CM7 | C7 | F&#10;Fm6 | C | D7 | CM7(1)&#10;C(2)&#10;&#10;[B: Melo]&#10;Dm | G | C | %"></textarea>
     </div>
   </div>
 
@@ -1583,7 +1595,7 @@ function toast(msg){
 }
 
 let undoTimer = null;
-function toastUndo(message, onUndo){
+function toastAction(message, actionLabel, onAction, timeoutMs){
   if(undoTimer) clearTimeout(undoTimer);
   let el = document.getElementById('undoToastEl');
   if(!el){
@@ -1592,15 +1604,18 @@ function toastUndo(message, onUndo){
     el.style.cssText = 'position:fixed;left:50%;bottom:calc(var(--nav-h) + 16px);transform:translateX(-50%);background:var(--bg-elev-3);color:var(--text);padding:8px 8px 8px 16px;border-radius:999px;font-size:13px;z-index:200;box-shadow:var(--shadow);border:1px solid var(--border);max-width:92vw;display:none;align-items:center;gap:10px;';
     document.body.appendChild(el);
   }
-  el.innerHTML = `<span>${escapeHtml(message)}</span><button id="undoBtn" style="background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;flex:none;">Deshacer</button>`;
+  el.innerHTML = `<span>${escapeHtml(message)}</span><button id="undoBtn" style="background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;flex:none;">${escapeHtml(actionLabel)}</button>`;
   el.style.display = 'flex';
   el.style.opacity = '1';
   document.getElementById('undoBtn').addEventListener('click', ()=>{
     clearTimeout(undoTimer);
     el.style.display = 'none';
-    onUndo();
+    onAction();
   }, {once:true});
-  undoTimer = setTimeout(()=>{ el.style.display = 'none'; }, 6000);
+  undoTimer = setTimeout(()=>{ el.style.display = 'none'; }, timeoutMs || 6000);
+}
+function toastUndo(message, onUndo){
+  toastAction(message, 'Deshacer', onUndo, 6000);
 }
 
 // Shared by the library card's trash icon and the Editor's "Eliminar" button
@@ -1883,14 +1898,15 @@ function parseChartText(text){
       return;
     }
     if(!current){ current = {label:'A', name:'', repeat:0, measures:[]}; sections.push(current); }
-    // Keep interior empty measures (real "insert a blank bar to fill in
-    // later" placeholders) — only drop a truly trailing empty segment, the
-    // harmless artifact of a line typed with a dangling "|" at the end.
-    const segs = line.split('|');
-    segs.forEach((seg, si)=>{
-      const t = seg.trim();
-      if(!t && si === segs.length-1) return;
-      current.measures.push(parseMeasureToken(t));
+    // Every segment becomes a measure, blank ones included — a blank measure
+    // is now a deliberate, first-class thing (the grid editor's "+ agregar
+    // compás/línea" creates them on purpose), and there's no reliable way to
+    // tell "3 real chords then 2 blanks to fill in later" apart from "someone
+    // typed a stray trailing |" from the text alone. Losing real blanks
+    // silently is worse than the rare extra blank from a stray pipe, which
+    // is a one-tap delete if it ever happens.
+    line.split('|').forEach(seg=>{
+      current.measures.push(parseMeasureToken(seg.trim()));
     });
   });
   return { sections };
@@ -2199,9 +2215,33 @@ function duplicateChartSection(index){
 document.getElementById('chartPreviewFull').addEventListener('click', e=>{
   const dupBtn = e.target.closest('[data-dup-section]');
   if(dupBtn){ duplicateChartSection(Number(dupBtn.dataset.dupSection)); return; }
+  const addLineBtn = e.target.closest('[data-addline-section]');
+  if(addLineBtn){ addBlankLineToSection(Number(addLineBtn.dataset.addlineSection)); return; }
+  if(e.target.closest('#btnAddFirstSection')){ addFirstBlankSection(); return; }
   const cell = e.target.closest('[data-cell-section]');
   if(cell && !cell.classList.contains('editing')) openCellEdit(Number(cell.dataset.cellSection), Number(cell.dataset.cellMeasure));
 });
+// Lets someone build a chart entirely by tapping, starting from nothing —
+// no need to type the "[A]" text syntax at all if they don't want to.
+function addFirstBlankSection(){
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  chart.sections.push({ label:'A', name:'', repeat:0, measures:[
+    {text:'',ending:null},{text:'',ending:null},{text:'',ending:null},{text:'',ending:null}
+  ]});
+  document.getElementById('fChartText').value = chartToText(chart);
+  updateChartPreview();
+  openCellEdit(0, 0); // jump straight into the first blank cell
+}
+function addBlankLineToSection(sectionIdx){
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[sectionIdx];
+  if(!section) return;
+  const startIdx = section.measures.length;
+  for(let i=0;i<4;i++) section.measures.push({text:'', ending:null});
+  document.getElementById('fChartText').value = chartToText(chart);
+  updateChartPreview();
+  openCellEdit(sectionIdx, startIdx); // jump into the first newly-added cell
+}
 
 /* ---- in-place cell editing: the CELL ITSELF becomes the text field (no
    separate input bar) — tap a cell, type right into it with the normal
@@ -2214,7 +2254,7 @@ function injectCellInput(sectionIdx, measureIdx, text){
   const cellEl = document.querySelector(`[data-cell-section="${sectionIdx}"][data-cell-measure="${measureIdx}"]`);
   if(!cellEl) return null;
   cellEl.classList.add('editing');
-  cellEl.innerHTML = `<input type="text" class="chart-cell-inline-input" spellcheck="false" autocomplete="off" autocapitalize="off" value="${escapeHtml(text||'')}">`;
+  cellEl.innerHTML = `<input type="text" class="chart-cell-inline-input" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" value="${escapeHtml(text||'')}">`;
   const inp = cellEl.querySelector('input');
   inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); closeCellEditBar(); } });
   return inp;
@@ -2483,6 +2523,42 @@ document.getElementById('btnShowChords').addEventListener('click', ()=>{
   openChordGlossary(tempSong);
 });
 
+
+document.getElementById('btnSearchYoutube').addEventListener('click', ()=>{
+  const title = document.getElementById('fTitle').value.trim();
+  const artist = document.getElementById('fArtist').value.trim();
+  const query = [title, artist].filter(Boolean).join(' ');
+  if(!query){ toast('Escribe un título primero'); return; }
+  window.open('https://www.youtube.com/results?search_query=' + encodeURIComponent(query), '_blank');
+});
+// After searching, the natural next step is "Compartir → Copiar enlace" on
+// the chosen video back in YouTube — this offers to paste it the moment you
+// return here, instead of a manual switch-app-copy-switch-back-paste dance.
+let lastClipboardOfferValue = null;
+async function checkClipboardForYoutubeLink(){
+  if(ui.view !== 'editor') return;
+  const field = document.getElementById('fYoutube');
+  if(!field) return;
+  try{
+    const text = (await navigator.clipboard.readText() || '').trim();
+    const id = extractYouTubeId(text);
+    if(!id) return;
+    if(field.value.trim() === text) return; // already has this exact link
+    if(lastClipboardOfferValue === text) return; // already offered this one this session
+    lastClipboardOfferValue = text;
+    toastAction('Se encontró un link de YouTube en el portapapeles', 'Pegar', ()=>{
+      field.value = text;
+      toast('Link pegado');
+    }, 8000);
+  }catch(err){
+    // No permission, empty clipboard, or non-text content — this is just a
+    // convenience, so it fails silently rather than bothering anyone.
+  }
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') checkClipboardForYoutubeLink();
+});
+window.addEventListener('focus', checkClipboardForYoutubeLink);
 
 document.getElementById('btnEdSave').addEventListener('click', ()=>{
   const data = readEditorForm();
@@ -3419,6 +3495,7 @@ function chartSectionHtml(section, interactive){
   const nameHtml = section.name ? `<span class="chart-name">${escapeHtml(section.name)}</span>` : '';
   const repeatTag = (section.repeat||0) > 1 ? `<span class="chart-repeat-tag">× ${section.repeat}</span>` : '';
   const dupBtn = interactive ? `<button type="button" class="chart-dup-btn" data-dup-section="${section.__idx}" title="Duplicar sección">⧉</button>` : '';
+  const addLineBtn = interactive ? `<button type="button" class="chart-addline-btn" data-addline-section="${section.__idx}">+ Agregar línea</button>` : '';
   return `
     <div class="chart-section">
       <div class="chart-section-head">
@@ -3428,11 +3505,20 @@ function chartSectionHtml(section, interactive){
         ${dupBtn}
       </div>
       <div class="chart-grid">${measuresHtml}</div>
+      ${addLineBtn}
     </div>`;
 }
 function renderChordChartHtml(chart, semitones, interactive){
   const sections = (chart && chart.sections) || [];
-  if(!sections.length) return '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
+  if(!sections.length){
+    if(interactive){
+      return `<div class="chart-empty-state">
+        <div class="hint" style="margin-bottom:12px;">Esta canción no tiene tabla de acordes todavía.</div>
+        <button type="button" class="btn primary" id="btnAddFirstSection">+ Agregar sección</button>
+      </div>`;
+    }
+    return '<div class="hint">(Esta canción no tiene tabla de acordes)</div>';
+  }
   return sections.map((s,i)=>{ s.__semitones = semitones; s.__idx = i; return chartSectionHtml(s, interactive); }).join('');
 }
 
