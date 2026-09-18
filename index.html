@@ -749,7 +749,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           <button type="button" class="btn small" id="btnAttachAudio">Adjuntar MP3</button>
           <button type="button" class="btn small danger hidden" id="btnRemoveAudio">Quitar</button>
         </div>
-        <input type="file" id="fileAudioAttach" accept="audio/*" class="hidden">
+        <input type="file" id="fileAudioAttach" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg" class="hidden">
       </div>
       <div class="field">
         <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -2553,7 +2553,7 @@ document.getElementById('btnCellDone').addEventListener('click', closeCellEditBa
 // dismissing any other text field on tap-away.
 document.addEventListener('pointerdown', e=>{
   if(!cellEditCtx) return;
-  if(e.target.closest('.chart-cell.editing') || e.target.closest('#cellEditDock') || e.target.closest('#cellPaletteSheet') || e.target.closest('#chordCandidatesPopup')) return;
+  if(e.target.closest('.chart-cell.editing') || e.target.closest('#cellEditDock') || e.target.closest('#cellPaletteSheet') || e.target.closest('#chordCandidatesPopup') || e.target.closest('#overlay')) return;
   if(e.target.closest('[data-cell-section]')) return; // switching cells is handled by the click handler above
   closeCellEditBar();
 });
@@ -2680,10 +2680,11 @@ document.querySelectorAll('.palette-btns').forEach(container=>{
 });
 document.getElementById('btnCellDelete').addEventListener('click', ()=>{
   if(!cellEditCtx) return;
+  const { sectionIdx, measureIdx } = cellEditCtx; // captured now, so this survives even if something else clears cellEditCtx while the confirm dialog is open
   confirmSheet('Eliminar compás', '¿Eliminar este compás de la sección?', ()=>{
     const chart = parseChartText(document.getElementById('fChartText').value);
-    const section = chart.sections[cellEditCtx.sectionIdx];
-    if(section) section.measures.splice(cellEditCtx.measureIdx, 1);
+    const section = chart.sections[sectionIdx];
+    if(section) section.measures.splice(measureIdx, 1);
     document.getElementById('fChartText').value = chartToText(chart);
     cellEditCtx = null; // nothing left to commit — already applied directly above
     document.getElementById('cellEditDock').classList.add('hidden');
