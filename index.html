@@ -3815,9 +3815,22 @@ function irealConvertChordToken(tok){
   if(bassRoot) out += '/' + bassRoot + (bassAcc||'');
   return out;
 }
-function irealConvertMeasureText(text){
-  if(!text || !text.trim()) return ' ';
-  return text.trim().split(/\s+/).map(irealConvertChordToken).join(' ');
+// iReal Pro's own convention: a measure is a fixed number of "cells" (one
+// per beat, by default 4 for 4/4) and a chord that doesn't restate on every
+// beat needs the REST of its cells padded with literal space characters —
+// otherwise chords read as jammed against the barline. This reuses the same
+// measureToSlots() beat-distribution the app's own beat-tick display and
+// eighth-note auto-switch already rely on, so the padding here matches
+// exactly what's shown on screen.
+function irealConvertMeasureText(measure, quarterSlots, eighthSlots){
+  const text = (measure.text || '').trim();
+  if(!text) return ' '.repeat(Math.max(1, quarterSlots));
+  if(isMeasureSpecial(text)) return irealConvertChordToken(text);
+  const { slots } = measureToSlots(measure, 0, quarterSlots, eighthSlots);
+  return slots.map(slot=>{
+    if(slot.holds) return ' '.repeat(Math.max(1, slot.span));
+    return irealConvertChordToken(slot.text) + ' '.repeat(Math.max(0, slot.span - 1));
+  }).join('');
 }
 function irealConvertKey(key){
   if(!key) return 'C';
@@ -3835,11 +3848,12 @@ function irealSectionToString(section, sectionIdx){
   const openBar = doRepeat ? '{' : '[';
   const closeBar = doRepeat ? '}' : ']';
   const repeatTag = doRepeat && section.repeat !== 2 ? `<${section.repeat}x>` : '';
+  const { quarterSlots, eighthSlots } = timeSigSlots(section.timeSig);
   const parts = (section.measures||[]).map(m=>{
     let s = '';
     if(m.ending === '1') s += 'N1';
     if(m.ending === '2') s += 'N2';
-    s += irealConvertMeasureText(m.text);
+    s += irealConvertMeasureText(m, quarterSlots, eighthSlots);
     return s;
   });
   return rehearsal + timeSigTok + openBar + repeatTag + parts.join('|') + closeBar;
