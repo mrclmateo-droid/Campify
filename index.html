@@ -281,6 +281,12 @@ nav#tabbar .brand{display:none;}
 .chart-badge{font-size:12px; font-weight:700; background:var(--accent); color:var(--accent-ink); border-radius:6px; padding:2px 9px; min-width:22px; text-align:center; cursor:pointer; border:0;}
 .chart-name{font-size:12px; color:var(--text-dim); background:none; border:0; flex:1; min-width:0;}
 .chart-repeat-tag{font-size:12px; font-weight:700; color:var(--accent); flex:none;}
+.chart-timesig-btn{
+  font-size:12px; font-weight:700; color:var(--text-dim); background:var(--bg-elev-2);
+  border:1px solid var(--border); border-radius:6px; padding:3px 8px; flex:none; cursor:pointer;
+}
+.chart-timesig-btn:active{background:var(--bg-elev-3);}
+.chart-timesig-label{font-size:12px; font-weight:700; color:var(--text-dim); flex:none;}
 .chart-dup-btn{border:1px solid var(--border); background:var(--bg-elev-2); color:var(--text-dim); border-radius:6px; width:28px; height:28px; font-size:14px; cursor:pointer; flex:none;}
 .chart-dup-btn:hover{color:var(--text); border-color:var(--text-faint);}
 .chart-addline-btn{
@@ -2391,10 +2397,58 @@ document.getElementById('chartPreviewFull').addEventListener('click', e=>{
   if(dupBtn){ duplicateChartSection(Number(dupBtn.dataset.dupSection)); return; }
   const addLineBtn = e.target.closest('[data-addline-section]');
   if(addLineBtn){ addBlankLineToSection(Number(addLineBtn.dataset.addlineSection)); return; }
+  const timeSigBtn = e.target.closest('[data-timesig-section]');
+  if(timeSigBtn){ openTimeSigPicker(Number(timeSigBtn.dataset.timesigSection)); return; }
   if(e.target.closest('#btnAddFirstSection')){ addFirstBlankSection(); return; }
   const cell = e.target.closest('[data-cell-section]');
   if(cell && !cell.classList.contains('editing')) openCellEdit(Number(cell.dataset.cellSection), Number(cell.dataset.cellMeasure));
 });
+// Each CELL is one whole MEASURE, counted in however many beats this picker
+// sets — not one beat itself. Changing it here just relabels how that
+// section's measures are counted for the beat-subdivision grid in
+// Presentation; it doesn't reshape or resize the measures themselves.
+function openTimeSigPicker(sectionIdx){
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[sectionIdx];
+  if(!section) return;
+  const current = section.timeSig || '4/4';
+  const common = ['4/4','3/4','2/4','6/8','12/8'];
+  const rows = common.map(ts => `
+    <div class="picker-row" data-timesig-choice="${ts}" style="cursor:pointer;">
+      <div class="info"><div class="t">${ts}${ts===current?' <span style="color:var(--accent); font-size:12px;">(actual)</span>':''}</div></div>
+    </div>`).join('');
+  openSheetHtml(`
+    <h2>Compás de la sección ${escapeHtml(section.label||'?')}</h2>
+    <div class="hint" style="margin:-4px 0 8px;">Cada celda de esta sección es un compás completo, contado en esta cantidad de pulsos. Cambiar esto no reordena ni borra nada de lo que ya escribiste.</div>
+    <div class="picker-list">${rows}</div>
+    <div class="field" style="margin-top:10px;">
+      <label for="timeSigCustom">Otro (por ejemplo 5/4, 7/8)</label>
+      <input type="text" id="timeSigCustom" placeholder="5/4" value="${['4/4','3/4','2/4','6/8','12/8'].includes(current)?'':escapeHtml(current)}">
+    </div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
+      <button class="btn primary" id="btnApplyCustomTimeSig" style="flex:1;">Usar este</button>
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.querySelectorAll('[data-timesig-choice]').forEach(row=>{
+    row.addEventListener('click', ()=>applyTimeSig(sectionIdx, row.dataset.timesigChoice));
+  });
+  document.getElementById('btnApplyCustomTimeSig').addEventListener('click', ()=>{
+    const val = document.getElementById('timeSigCustom').value.trim();
+    if(!/^\d{1,2}\/\d{1,2}$/.test(val)){ toast('Escribe un compás válido, como 5/4'); return; }
+    applyTimeSig(sectionIdx, val);
+  });
+}
+function applyTimeSig(sectionIdx, timeSig){
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[sectionIdx];
+  if(!section) return;
+  section.timeSig = timeSig === '4/4' ? '' : timeSig; // 4/4 is the default, no need to clutter the saved text with it
+  document.getElementById('fChartText').value = chartToText(chart);
+  updateChartPreview();
+  closeSheet();
+  toast('Compás actualizado a ' + timeSig);
+}
 // Lets someone build a chart entirely by tapping, starting from nothing —
 // no need to type the "[A]" text syntax at all if they don't want to.
 function addFirstBlankSection(){
@@ -3897,10 +3951,18 @@ function chartSectionHtml(section, interactive){
   const repeatTag = (section.repeat||0) > 1 ? `<span class="chart-repeat-tag">× ${section.repeat}</span>` : '';
   const dupBtn = interactive ? `<button type="button" class="chart-dup-btn" data-dup-section="${section.__idx}" title="Duplicar sección">⧉</button>` : '';
   const addLineBtn = interactive ? `<button type="button" class="chart-addline-btn" data-addline-section="${section.__idx}">+ Agregar línea</button>` : '';
+  // Shown so it's clear each CELL is one whole measure, counted in this many
+  // beats — not one beat itself, which is easy to assume just by looking at
+  // a grid of same-sized boxes with no other cue.
+  const timeSigLabel = section.timeSig || '4/4';
+  const timeSigBadge = interactive
+    ? `<button type="button" class="chart-timesig-btn" data-timesig-section="${section.__idx}" title="Cambiar el compás de esta sección">${escapeHtml(timeSigLabel)}</button>`
+    : `<span class="chart-timesig-label">${escapeHtml(timeSigLabel)}</span>`;
   return `
     <div class="chart-section">
       <div class="chart-section-head">
         <span class="chart-badge">${escapeHtml(section.label||'?')}</span>
+        ${timeSigBadge}
         ${repeatTag}
         ${nameHtml}
         ${dupBtn}
