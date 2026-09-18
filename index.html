@@ -222,14 +222,17 @@ nav#tabbar .brand{display:none;}
   padding-bottom:calc(8px + env(safe-area-inset-bottom));
   background:var(--bg-elev); border-top:1px solid var(--border); flex:none;
 }
-.chart-cell.editing{padding:24px 4px; background:var(--bg-elev-2); border-radius:6px; box-shadow:inset 0 0 0 2px var(--accent);}
-.chart-cell-inline-input{
-  width:100%; background:none; border:0; outline:none; text-align:center;
-  font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--accent);
-  padding:0;
+.chart-cell.editing{
+  padding:14px 2px; background:var(--bg-elev-2); border-radius:6px; box-shadow:inset 0 0 0 2px var(--accent);
+  display:flex; align-items:stretch; gap:2px;
 }
-.chart-cell-inline-input:focus{outline:none;}
-.chart-cell.editing .chart-cell-inline-input{font-size:30px;}
+.chart-cell-beat-input{
+  flex:1; min-width:0; background:var(--bg-elev); border:1px solid var(--border-soft); border-radius:4px;
+  text-align:center; font-family:var(--font-mono); font-size:16px; font-weight:700; color:var(--accent);
+  padding:8px 1px;
+}
+.chart-cell-beat-input:focus{outline:2px solid var(--accent); outline-offset:1px;}
+.chart-cell-beat-input::placeholder{color:var(--text-faint); opacity:.6;}
 /* A fixed-position popup (not nested inside the scrolling grid pane) so it
    can never get edge-clipped the way a transform/overflow trick could —
    the same clipping issue that made the "bigger cell" effect invisible. */
@@ -321,7 +324,7 @@ nav#tabbar .brand{display:none;}
 .chart-grid{display:grid; grid-template-columns:repeat(4,1fr); border-top:0.5px solid var(--border); border-left:0.5px solid var(--border);}
 .chart-cell{
   border-right:0.5px solid var(--border); border-bottom:0.5px solid var(--border);
-  padding:14px 4px; font-size:22px; text-align:center; cursor:pointer; position:relative;
+  padding:14px 4px; font-size:22px; text-align:center; cursor:pointer; position:relative; min-width:0;
   min-height:var(--tap); display:flex; align-items:center; justify-content:center; background:none; color:var(--accent);
 }
 .chart-cell.muted{color:var(--text-faint); font-size:17px;}
@@ -2484,20 +2487,52 @@ function addBlankLineToSection(sectionIdx){
    finish) stays docked at the bottom for the things typing alone can't do:
    endings, delete, insert measures. ---- */
 let cellEditCtx = null, cellEndingValue = null;
-function injectCellInput(sectionIdx, measureIdx, text){
+// Splits a measure's raw text into exactly `quarterSlots` beat tokens,
+// padding any missing trailing ones with "." (hold) — this is what the
+// per-beat editor always shows, even for a plain single-chord measure like
+// "Am" (which becomes Am,.,.,. for editing, then collapses back to just
+// "Am" on commit since trailing holds are implicit either way).
+function measureToBeatTokens(measureText, quarterSlots){
+  const raw = (measureText||'').trim().split(/\s+/).filter(Boolean);
+  const tokens = [];
+  for(let i=0;i<quarterSlots;i++) tokens.push(raw[i] !== undefined ? raw[i] : '.');
+  return tokens;
+}
+let lastFocusedBeatInput = null;
+function injectCellBeatInputs(sectionIdx, measureIdx){
   document.querySelectorAll('.chart-cell.editing').forEach(el=>el.classList.remove('editing'));
   const cellEl = document.querySelector(`[data-cell-section="${sectionIdx}"][data-cell-measure="${measureIdx}"]`);
   if(!cellEl) return null;
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[sectionIdx];
+  const measure = section && section.measures[measureIdx];
+  if(!section || !measure) return null;
+  const { quarterSlots } = timeSigSlots(section.timeSig);
+  const tokens = measureToBeatTokens(measure.text, quarterSlots);
   cellEl.classList.add('editing');
-  cellEl.innerHTML = `<input type="text" class="chart-cell-inline-input" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="words" value="${escapeHtml(text||'')}">`;
-  const inp = cellEl.querySelector('input');
-  inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); clearTimeout(cellPauseTimer); advanceToNextCell(); } });
-  inp.addEventListener('input', ()=>scheduleCellPauseCheck(inp));
+  cellEl.innerHTML = tokens.map((t,i)=>
+    `<input type="text" class="chart-cell-beat-input" data-beat-index="${i}" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="words" value="${escapeHtml(t==='.'?'':t)}" placeholder="·">`
+  ).join('');
+  const inputs = [...cellEl.querySelectorAll('.chart-cell-beat-input')];
+  inputs.forEach((inp,i)=>{
+    inp.addEventListener('keydown', e=>{ if(e.key === 'Enter'){ e.preventDefault(); clearTimeout(cellPauseTimer); advanceBeat(i); } });
+    inp.addEventListener('input', ()=>scheduleCellPauseCheck(inp, i));
+    inp.addEventListener('focus', ()=>{ lastFocusedBeatInput = inp; });
+  });
   hideChordCandidatesPopup();
-  return inp;
+  return inputs;
 }
-function activeCellInput(){ return document.querySelector('.chart-cell.editing input'); }
-function openCellEdit(sectionIdx, measureIdx){
+function activeCellBeatInputs(){ return [...document.querySelectorAll('.chart-cell.editing .chart-cell-beat-input')]; }
+// Prefers whichever beat box the person actually has focus in (or last
+// focused, since tapping a palette button can momentarily blur it); falls
+// back to the first beat if nothing's been focused yet this session.
+function focusedBeatInput(){
+  const inputs = activeCellBeatInputs();
+  if(!inputs.length) return null;
+  if(lastFocusedBeatInput && inputs.includes(lastFocusedBeatInput)) return lastFocusedBeatInput;
+  return inputs[0];
+}
+function openCellEdit(sectionIdx, measureIdx, beatIndex){
   const chart = parseChartText(document.getElementById('fChartText').value);
   const section = chart.sections[sectionIdx];
   const measure = section && section.measures[measureIdx];
@@ -2506,22 +2541,25 @@ function openCellEdit(sectionIdx, measureIdx){
   cellEditCtx = { sectionIdx, measureIdx };
   cellEndingValue = measure.ending || null;
   updateCellEndingButtons();
-  const inp = injectCellInput(sectionIdx, measureIdx, measure.text);
+  const inputs = injectCellBeatInputs(sectionIdx, measureIdx);
   document.getElementById('cellEditDock').classList.remove('hidden');
-  if(inp) setTimeout(()=>{ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 30);
+  const focusIdx = (typeof beatIndex === 'number') ? beatIndex : 0;
+  if(inputs && inputs[focusIdx]) setTimeout(()=>{ inputs[focusIdx].focus(); }, 30);
 }
 function commitCellEdit(){
   if(!cellEditCtx) return;
-  const inp = activeCellInput();
-  if(!inp) return;
+  const inputs = activeCellBeatInputs();
+  if(!inputs.length) return;
   const chart = parseChartText(document.getElementById('fChartText').value);
   const section = chart.sections[cellEditCtx.sectionIdx];
   const measure = section && section.measures[cellEditCtx.measureIdx];
   if(measure){
-    measure.text = inp.value.trim();
+    const tokens = inputs.map(inp => inp.value.trim() || '.');
+    while(tokens.length > 1 && tokens[tokens.length-1] === '.') tokens.pop(); // trailing holds are implicit either way
+    measure.text = tokens.every(t=>t==='.') ? '' : tokens.join(' ');
     measure.ending = cellEndingValue;
     document.getElementById('fChartText').value = chartToText(chart);
-    updateChartPreview(); // re-renders the grid, which naturally removes the injected input too
+    updateChartPreview(); // re-renders the grid, which naturally removes the injected inputs too
   }
 }
 function closeCellEditBar(){
@@ -2531,19 +2569,28 @@ function closeCellEditBar(){
   hideChordCandidatesPopup();
   clearTimeout(cellPauseTimer);
   cellEditCtx = null;
+  lastFocusedBeatInput = null;
 }
-// Enter commits the current cell and jumps straight into the next one, so
-// filling in a whole row is type → Enter → type → Enter, never touching
-// "Listo" until the very last cell.
+// Moving on from one beat goes to the NEXT BEAT in the same measure first —
+// only once the last beat is done does it advance to the next measure.
+function advanceBeat(fromBeatIndex){
+  if(!cellEditCtx) return;
+  const inputs = activeCellBeatInputs();
+  if(fromBeatIndex + 1 < inputs.length){
+    inputs[fromBeatIndex+1].focus();
+    return;
+  }
+  advanceToNextCell();
+}
 function advanceToNextCell(){
   if(!cellEditCtx) return;
   const { sectionIdx, measureIdx } = cellEditCtx;
   const chart = parseChartText(document.getElementById('fChartText').value);
   const section = chart.sections[sectionIdx];
   if(section && measureIdx + 1 < section.measures.length){
-    openCellEdit(sectionIdx, measureIdx + 1); // commits the current cell internally, then opens the next
+    openCellEdit(sectionIdx, measureIdx + 1, 0); // commits the current cell internally, then opens the next
   } else if(chart.sections[sectionIdx+1] && chart.sections[sectionIdx+1].measures.length){
-    openCellEdit(sectionIdx+1, 0);
+    openCellEdit(sectionIdx+1, 0, 0);
   } else {
     closeCellEditBar(); // no more cells to advance to
   }
@@ -2579,30 +2626,27 @@ document.getElementById('btnCellEnd2').addEventListener('click', ()=>{ cellEndin
 //     right from the cell, tap one to fix it (then it re-checks and flows)
 //   - neither -> leave it alone, might still be mid-word
 let cellPauseTimer = null;
-function scheduleCellPauseCheck(input){
+function scheduleCellPauseCheck(input, beatIndex){
   clearTimeout(cellPauseTimer);
   hideChordCandidatesPopup();
   cellPauseTimer = setTimeout(()=>{
     const text = input.value.trim();
-    if(!text) return;
-    if(isFullyValidChordText(text)){
-      advanceToNextCell();
+    if(!text) return; // empty box = holds the previous beat, nothing to validate or advance on
+    if(text === '%' || isMeasureSpecial(text) || isChordToken(text)){
+      advanceBeat(beatIndex);
       return;
     }
-    const tokens = text.split(/\s+/).filter(Boolean);
-    const lastTok = tokens[tokens.length-1];
-    const candidates = suggestChordCandidates(lastTok);
+    const candidates = suggestChordCandidates(text);
     if(candidates.length){
       const cellEl = input.closest('.chart-cell');
       showChordCandidatesPopup(cellEl, candidates, chosen=>{
-        tokens[tokens.length-1] = chosen;
-        input.value = tokens.join(' ');
+        input.value = chosen;
         hideChordCandidatesPopup();
-        if(isFullyValidChordText(input.value)) advanceToNextCell();
-        else { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+        input.focus();
+        if(isChordToken(chosen)) advanceBeat(beatIndex);
       });
     }
-  }, 700);
+  }, 1400); // longer pause than before — 700ms didn't leave enough time to reposition, especially with the pencil
 }
 function showChordCandidatesPopup(cellEl, candidates, onPick){
   const popup = document.getElementById('chordCandidatesPopup');
@@ -2629,7 +2673,7 @@ function hideChordCandidatesPopup(){
 
 document.getElementById('btnCellPaletteToggle').addEventListener('click', ()=>{
   const sheet = document.getElementById('cellPaletteSheet');
-  const inp = activeCellInput();
+  const inp = focusedBeatInput();
   const opening = sheet.classList.contains('hidden');
   sheet.classList.toggle('hidden', !opening);
   if(!inp) return;
@@ -2648,11 +2692,18 @@ Object.entries(CELL_PALETTE).forEach(([containerId, items])=>{
   const special = containerId === 'paletteSpecial';
   el.innerHTML = items.map(t=>`<button type="button" class="palette-btn${special?' special':''}" data-insert="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('');
 });
-// Notes get smart-spaced (start a new chord); qualities/bass attach right
-// where the cursor is (so tapping C then m then 7 builds "Cm7"); N.C./%
-// replace the whole field since a measure can't mix those with chords.
+// A beat box holds exactly one token — tapping a root NOTE starts a fresh
+// chord in this beat (replacing whatever was there); tapping a quality/bass
+// symbol attaches at the cursor so C→m→7 builds "Cm7" within that same
+// beat. N.C./% replace the whole box since neither combines with a chord.
 function insertAtCursor(input, token){
   if(token === 'N.C.' || token === '%'){
+    input.value = token;
+    input.setSelectionRange(token.length, token.length);
+    return;
+  }
+  const isNote = /^[A-G]/.test(token);
+  if(isNote){
     input.value = token;
     input.setSelectionRange(token.length, token.length);
     return;
@@ -2661,18 +2712,15 @@ function insertAtCursor(input, token){
   const end = input.selectionEnd ?? input.value.length;
   const before = input.value.slice(0, start);
   const after = input.value.slice(end);
-  const isNote = /^[A-G]/.test(token);
-  const needsSpace = isNote && before.length > 0 && !/\s$/.test(before);
-  const insertion = (needsSpace ? ' ' : '') + token;
-  input.value = before + insertion + after;
-  const newPos = start + insertion.length;
+  input.value = before + token + after;
+  const newPos = start + token.length;
   input.setSelectionRange(newPos, newPos);
 }
 document.querySelectorAll('.palette-btns').forEach(container=>{
   container.addEventListener('click', e=>{
     const btn = e.target.closest('[data-insert]');
     if(!btn) return;
-    const inp = activeCellInput();
+    const inp = focusedBeatInput();
     if(!inp) return;
     insertAtCursor(inp, btn.dataset.insert);
     inp.focus();
@@ -3825,12 +3873,17 @@ function irealConvertChordToken(tok){
 // exactly what's shown on screen.
 function irealConvertMeasureText(measure, quarterSlots, eighthSlots){
   const text = (measure.text || '').trim();
-  if(!text) return ' '.repeat(Math.max(1, quarterSlots));
+  if(!text) return ' '.repeat(Math.min(2, Math.max(1, quarterSlots)));
   if(isMeasureSpecial(text)) return irealConvertChordToken(text);
   const { slots } = measureToSlots(measure, 0, quarterSlots, eighthSlots);
+  // Capped at 2 padding spaces per chord (not the full cell width) — still
+  // enough visual separation that chords don't read as jammed together, but
+  // for a very long chart (several hundred measures) the full proportional
+  // padding balloons the exported link past what iOS will hand off intact
+  // to iReal Pro, silently truncating the song. See songExceedsIrealSafeLength().
   return slots.map(slot=>{
-    if(slot.holds) return ' '.repeat(Math.max(1, slot.span));
-    return irealConvertChordToken(slot.text) + ' '.repeat(Math.max(0, slot.span - 1));
+    if(slot.holds) return ' '.repeat(Math.min(2, Math.max(1, slot.span)));
+    return irealConvertChordToken(slot.text) + ' '.repeat(Math.min(2, Math.max(0, slot.span - 1)));
   }).join('');
 }
 function irealConvertKey(key){
@@ -3884,6 +3937,24 @@ document.getElementById('btnExportIrealEditor').addEventListener('click', async 
   const s = state.songs.find(x=>x.id===ui.editingSongId);
   if(!s) return;
   if(!songHasChart(s)){ toast('Esta canción no tiene tabla de acordes para exportar'); return; }
+  const urlLength = songToIrealUrl(s).length;
+  // No official documented limit exists for how long an iOS custom URL
+  // scheme handoff can be — but very long charts (found in practice: an
+  // 800-measure song produced a ~10,700-character link that iReal Pro only
+  // partly received) show it's real. 4000 is a conservative line to warn
+  // well before that, not a number Apple publishes anywhere.
+  if(urlLength > 4000){
+    confirmSheet(
+      'Canción muy larga',
+      `Esta canción genera un enlace de ${urlLength} caracteres. No hay un límite oficial publicado, pero en la práctica las canciones muy largas (varios cientos de compases) a veces llegan incompletas a iReal Pro — no depende de esta app, es cómo iOS entrega el enlace a la otra. ¿Exportar de todos modos?`,
+      ()=>doExportIreal(s),
+      'Exportar igual'
+    );
+    return;
+  }
+  doExportIreal(s);
+});
+async function doExportIreal(s){
   const html = songToIrealHtml(s);
   const blob = new Blob([html], {type:'text/html'});
   const filename = (s.title||'cancion').replace(/[^\w\-]+/g,'-') + '.html';
@@ -3900,7 +3971,7 @@ document.getElementById('btnExportIrealEditor').addEventListener('click', async 
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 2000);
   toast('Archivo para iReal Pro exportado');
-});
+}
 
 function extractYouTubeId(url){
   if(!url) return null;
@@ -4080,6 +4151,29 @@ function measureToSlots(measure, semitones, quarterSlots, eighthSlots){
   const displayText = transposeMeasureText(measure.text, semitones);
   if(isMeasureSpecial(measure.text)){
     return { slots: [{ text: displayText, span: quarterSlots, holds:false }], eighthMode:false };
+  }
+  const rawTokens = (measure.text||'').trim().split(/\s+/).filter(Boolean);
+  // Explicit beat positions: "." holds the previous chord silently (no new
+  // attack), "%" re-attacks it. Only engages when the person actually used
+  // one of those — plain chord text keeps working exactly as before
+  // (auto-distributed evenly across the beats), so nothing written before
+  // this existed changes how it looks.
+  if(rawTokens.some(t => t === '.' || t === '%')){
+    const slots = [];
+    let lastDisplay = '';
+    for(let i=0; i<quarterSlots; i++){
+      const raw = rawTokens[i];
+      if(raw === undefined || raw === '.'){
+        slots.push({ text: lastDisplay, span:1, holds:true });
+      } else if(raw === '%'){
+        slots.push({ text: lastDisplay, span:1, holds:false });
+      } else {
+        const disp = isChordToken(raw) ? transposeToken(raw, semitones) : raw;
+        lastDisplay = disp;
+        slots.push({ text: disp, span:1, holds:false });
+      }
+    }
+    return { slots, eighthMode:false };
   }
   const chords = displayText.split(/\s+/).filter(Boolean);
   if(!chords.length) return { slots: [{ text:'', span: quarterSlots, holds:false }], eighthMode:false };
