@@ -327,8 +327,11 @@ nav#tabbar .brand{display:none;}
 .chart-cell.muted{color:var(--text-faint); font-size:17px;}
 .chart-cell.tappable{cursor:pointer;}
 .chart-cell.tappable:active{background:var(--bg-elev-2);}
-.chart-cell-multi{display:flex; align-items:center; justify-content:center; gap:4px; width:100%;}
-.chart-cell-multi span{flex:1; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.chart-cell-content{position:relative; z-index:1; width:100%; display:flex; align-items:center; justify-content:center;}
+.chart-tick-editor{position:absolute; top:8px; bottom:8px; width:1px; background:var(--border); z-index:0; pointer-events:none;}
+.chart-tick-editor.sub{opacity:0.45;}
+.chart-cell-multi{display:flex; align-items:center; justify-content:center; gap:4px; width:100%; flex-wrap:wrap;}
+.chart-cell-multi span{flex:0 1 auto; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .chart-cell-multi.stacked{flex-direction:column; gap:1px;}
 .chart-cell-multi.stacked span{font-size:0.55em; flex:none;}
 .chart-cell.add-cell{color:var(--text-faint); font-size:20px; font-family:var(--font-ui); font-weight:400;}
@@ -1027,6 +1030,9 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <div class="cell-editor-actions">
         <button type="button" class="btn" id="btnCellInsertBefore">+ Compás antes</button>
         <button type="button" class="btn" id="btnCellInsertAfter">+ Compás después</button>
+      </div>
+      <div class="cell-editor-actions">
+        <button type="button" class="btn" id="btnCellMergeNext" title="Combina este compás con el siguiente en uno solo">Unir con el siguiente</button>
       </div>
     </div>
     <div class="cell-edit-bar" id="cellEditBar">
@@ -2704,6 +2710,32 @@ function insertMeasureRelative(offset){
 }
 document.getElementById('btnCellInsertBefore').addEventListener('click', ()=>insertMeasureRelative(0));
 document.getElementById('btnCellInsertAfter').addEventListener('click', ()=>insertMeasureRelative(1));
+// Fixes the most common problem with "Generar desde la letra": every chord
+// it finds becomes its own separate measure, so a line with 4 chords that
+// really belongs in ONE 4/4 bar shows as 4 bars instead. This folds the
+// next measure's text into the current one (space-joined, so it becomes a
+// multi-chord measure) and removes the now-empty slot after it.
+document.getElementById('btnCellMergeNext').addEventListener('click', ()=>{
+  if(!cellEditCtx) return;
+  commitCellEdit();
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[cellEditCtx.sectionIdx];
+  if(!section) return;
+  const idx = cellEditCtx.measureIdx;
+  if(idx+1 >= section.measures.length){ toast('No hay otro compás después para unir'); return; }
+  const current = section.measures[idx];
+  const next = section.measures[idx+1];
+  const combinedText = [current.text, next.text].filter(Boolean).join(' ');
+  section.measures[idx] = { text: combinedText, ending: current.ending || next.ending || null };
+  section.measures.splice(idx+1, 1);
+  document.getElementById('fChartText').value = chartToText(chart);
+  updateChartPreview();
+  cellEndingValue = section.measures[idx].ending;
+  updateCellEndingButtons();
+  const inp = injectCellInput(cellEditCtx.sectionIdx, idx, combinedText);
+  if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  toast('Compases unidos');
+});
 
 /* ---- voice assignment: line-by-line UI instead of manual bracket tags ---- */
 function parseLyricsIntoBlocks(lyricsText){
@@ -3935,6 +3967,7 @@ function measureToSlots(measure, semitones, quarterSlots, eighthSlots){
   return { slots, eighthMode:true };
 }
 function chartSectionHtml(section, interactive){
+  const { quarterSlots, eighthSlots } = timeSigSlots(section.timeSig);
   const measuresHtml = (section.measures||[]).map((m,mi)=>{
     const displayText = transposeMeasureText(m.text, section.__semitones || 0);
     const special = isMeasureSpecial(m.text);
@@ -3942,10 +3975,22 @@ function chartSectionHtml(section, interactive){
     const cls = 'chart-cell chartfont' + (special ? ' muted' : '') + (interactive ? ' tappable' : '');
     const subChords = special ? [displayText] : displayText.split(/\s+/).filter(Boolean);
     const inner = subChords.length > 1
-      ? `<div class="chart-cell-multi${subChords.length>2?' stacked':''}">${subChords.map(c=>`<span>${escapeHtml(c)}</span>`).join('')}</div>`
+      ? `<div class="chart-cell-multi"${subChords.length>2?' style="font-size:0.7em;"':''}>${subChords.map(c=>`<span>${escapeHtml(c)}</span>`).join('')}</div>`
       : escapeHtml(subChords[0] || '');
     const dataAttrs = interactive ? ` data-cell-section="${section.__idx}" data-cell-measure="${mi}"` : '';
-    return `<div class="${cls}"${dataAttrs}>${endingTag}${inner}</div>`;
+    // Faint reference ticks behind the chord text, same auto quarter/eighth
+    // rule Presentation uses — shows where the beats fall even for a single
+    // chord filling the whole bar, purely visual, never changes the text.
+    const ticksHtml = special ? '' : (()=>{
+      const eighthMode = subChords.length > quarterSlots;
+      const totalTicks = eighthMode ? eighthSlots : quarterSlots;
+      return Array.from({length: totalTicks-1}, (_,i)=>{
+        const pos = ((i+1)/totalTicks)*100;
+        const isBeatTick = eighthMode ? ((i+1) % 2 === 0) : true;
+        return `<div class="chart-tick-editor${isBeatTick?'':' sub'}" style="left:${pos}%;"></div>`;
+      }).join('');
+    })();
+    return `<div class="${cls}"${dataAttrs}>${ticksHtml}${endingTag}<span class="chart-cell-content">${inner}</span></div>`;
   }).join('');
   const nameHtml = section.name ? `<span class="chart-name">${escapeHtml(section.name)}</span>` : '';
   const repeatTag = (section.repeat||0) > 1 ? `<span class="chart-repeat-tag">× ${section.repeat}</span>` : '';
