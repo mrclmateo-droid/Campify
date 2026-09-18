@@ -715,6 +715,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <button class="btn" id="btnReharmonize" title="Crea una copia con séptimas diatónicas según la tonalidad"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg> Reharmonizar</button>
         <button class="btn" id="btnShowChords" title="Ver diagramas de los acordes de esta canción"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M3 10h18"/></svg> Ver acordes</button>
         <button class="btn" id="btnExportPdfEditor" title="Exportar esta canción como PDF"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg> Exportar PDF</button>
+        <button class="btn" id="btnExportIrealEditor" title="Exportar la tabla de acordes para abrir en iReal Pro">Exportar a iReal Pro</button>
         <button class="btn danger" id="btnEdDelete"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg> Eliminar</button>
         <button class="btn ghost" id="btnEdCancel">Cancelar edición</button>
       </div>
@@ -3773,6 +3774,119 @@ function currentPresentSong(){
    A plain <iframe> embed, not the full IFrame Player API — the person just
    wants to hear the song without leaving the app; the embed's own YouTube
    controls (play/pause/seek) already cover that with far less code. */
+/* ============================================================
+   EXPORT TO iREAL PRO
+   Builds the irealbook:// custom URL scheme iReal Pro imports, per its own
+   published protocol (irealpro.com/ireal-pro-custom-chord-chart-protocol).
+   Verified structurally against their own documented example before this
+   was wired in — but there's no way to actually test an import into the
+   real iReal Pro app from here, so the first real file is worth a quick
+   confirmation on-device before trusting it for a gig.
+   ============================================================ */
+const IREAL_QUALITY_MAP = {
+  '': '', 'm': '-', 'min': '-',
+  '7': '7', 'm7': '-7', 'min7': '-7',
+  'M7': '^7', 'maj7': '^7', 'M': '^7', 'maj': '^7',
+  'M9': '^9', 'maj9': '^9', 'M13': '^13', 'maj13': '^13',
+  'dim': 'o', 'dim7': 'o7', 'aug': '+',
+  'sus2': 'sus', 'sus4': 'sus', '7sus4': '7sus',
+  'm7b5': 'h7',
+  '6': '6', 'm6': '-6', '69': '69', '6/9': '69',
+  '9': '9', 'm9': '-9', '11': '11', 'm11': '-11', '13': '13', 'm13': '-13',
+  'add9': 'add9', 'madd9': '-add9',
+  '7b5': '7b5', '7#5': '7#5', '7b9': '7b9', '7#9': '7#9', '7#11': '7#11',
+  '9b5': '9b5', '9#5': '9#5', '9#11': '9#11',
+  '13b9': '13b9', '13#9': '13#9', '13#11': '13#11',
+  'mM7': '-^7', 'minmaj7': '-^7'
+};
+const IREAL_TIMESIG_MAP = {
+  '4/4':'T44', '3/4':'T34', '2/4':'T24', '5/4':'T54', '6/4':'T64', '7/4':'T74',
+  '2/2':'T22', '3/2':'T32', '5/8':'T58', '6/8':'T68', '7/8':'T78', '9/8':'T98', '12/8':'T12'
+};
+function irealConvertChordToken(tok){
+  if(!tok) return '';
+  if(tok === 'N.C.' || tok === 'NC') return 'n';
+  if(tok === '%') return 'x';
+  const m = tok.match(/^([A-G])([#b]?)((?:maj|min|dim|aug|sus|add|m|M|[#b]|\d)*)(?:\/([A-G])([#b]?))?$/);
+  if(!m) return tok; // can't parse — pass through as a best-effort fallback
+  const [, root, acc, qual, bassRoot, bassAcc] = m;
+  const mappedQual = (qual in IREAL_QUALITY_MAP) ? IREAL_QUALITY_MAP[qual] : qual;
+  let out = root + acc + mappedQual;
+  if(bassRoot) out += '/' + bassRoot + (bassAcc||'');
+  return out;
+}
+function irealConvertMeasureText(text){
+  if(!text || !text.trim()) return ' ';
+  return text.trim().split(/\s+/).map(irealConvertChordToken).join(' ');
+}
+function irealConvertKey(key){
+  if(!key) return 'C';
+  const m = key.trim().match(/^([A-G][#b]?)(m)?$/i);
+  if(!m) return key;
+  const root = m[1][0].toUpperCase() + m[1].slice(1);
+  return root + (m[2] ? '-' : '');
+}
+function irealSectionToString(section, sectionIdx){
+  const letters = ['A','B','C','D'];
+  const label = section.label && letters.includes(section.label[0].toUpperCase()) ? section.label[0].toUpperCase() : letters[sectionIdx % 4];
+  const rehearsal = '*' + label;
+  const timeSigTok = section.timeSig && IREAL_TIMESIG_MAP[section.timeSig] ? IREAL_TIMESIG_MAP[section.timeSig] : '';
+  const doRepeat = (section.repeat || 0) > 1;
+  const openBar = doRepeat ? '{' : '[';
+  const closeBar = doRepeat ? '}' : ']';
+  const repeatTag = doRepeat && section.repeat !== 2 ? `<${section.repeat}x>` : '';
+  const parts = (section.measures||[]).map(m=>{
+    let s = '';
+    if(m.ending === '1') s += 'N1';
+    if(m.ending === '2') s += 'N2';
+    s += irealConvertMeasureText(m.text);
+    return s;
+  });
+  return rehearsal + timeSigTok + openBar + repeatTag + parts.join('|') + closeBar;
+}
+function songToIrealUrl(song){
+  const title = (song.title || 'Sin título').replace(/=/g, '');
+  const composer = (song.artist || '').replace(/=/g, '');
+  const style = 'Pop'; // we don't track a style field; a reasonable, harmless default
+  const key = irealConvertKey(song.key);
+  const sections = (song.chordChart && song.chordChart.sections) || [];
+  const progression = sections.map((s,i)=>irealSectionToString(s,i)).join('') + 'Z';
+  const raw = [title, composer, style, key, 'n', progression].join('=');
+  return 'irealbook://' + encodeURIComponent(raw);
+}
+function songToIrealHtml(song){
+  const url = songToIrealUrl(song);
+  const title = escapeHtml(song.title || 'Sin título');
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${title}</title></head>
+<body style="font-family:-apple-system,sans-serif; text-align:center; padding:40px 20px;">
+  <p>Toca el enlace para abrir esta canción en iReal Pro:</p>
+  <p><a href="${url}">${title}</a></p>
+</body></html>`;
+}
+document.getElementById('btnExportIrealEditor').addEventListener('click', async ()=>{
+  if(!ui.editingSongId){ toast('Guarda la canción primero'); return; }
+  const s = state.songs.find(x=>x.id===ui.editingSongId);
+  if(!s) return;
+  if(!songHasChart(s)){ toast('Esta canción no tiene tabla de acordes para exportar'); return; }
+  const html = songToIrealHtml(s);
+  const blob = new Blob([html], {type:'text/html'});
+  const filename = (s.title||'cancion').replace(/[^\w\-]+/g,'-') + '.html';
+  try{
+    const file = new File([blob], filename, {type:'text/html'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title: filename});
+      return;
+    }
+  }catch(err){ if(err.name === 'AbortError') return; }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  toast('Archivo para iReal Pro exportado');
+});
+
 function extractYouTubeId(url){
   if(!url) return null;
   const m = url.match(/(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtu\.be\/|youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/);
