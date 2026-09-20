@@ -988,6 +988,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <button class="btn small" id="btnChartModeToggle" title="Escribir como texto">Texto</button>
       <button class="btn small" id="btnGenerateChart" title="Generar desde la letra">Desde la letra</button>
       <button class="btn small" id="btnChartTemplates" title="Insertar una progresión común">Plantillas</button>
+      <button class="btn small" id="btnCompressRepeats" title="Reemplaza compases repetidos seguidos por &quot;%&quot;">Comprimir repeticiones</button>
       <button class="btn small" id="btnChartHelp" title="Ayuda">?</button>
     </div>
   </div>
@@ -1037,6 +1038,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       </div>
       <div class="cell-editor-actions">
         <button type="button" class="btn" id="btnCellMergeNext" title="Combina este compás con el siguiente en uno solo">Unir con el siguiente</button>
+        <button type="button" class="btn" id="btnCellRepeatTimes" title="Repite este compás varias veces seguidas">Repetir ×N</button>
       </div>
     </div>
     <div class="cell-edit-bar" id="cellEditBar">
@@ -2364,6 +2366,55 @@ function nextChartSectionLabel(text){
   for(const l of letters) if(!used.includes(l)) return l;
   return '?';
 }
+// Finds runs of 3+ CONSECUTIVE identical measures (same text, not already
+// "%") within each section — exactly the pattern our PDF importers produce,
+// since they write every repeated bar out literally instead of using "%".
+function findCompressibleRuns(){
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const runs = [];
+  chart.sections.forEach((section, sIdx)=>{
+    let i = 0;
+    while(i < section.measures.length){
+      const text = (section.measures[i].text||'').trim();
+      if(!text || text === '%' || section.measures[i].ending){ i++; continue; }
+      let j = i+1;
+      while(j < section.measures.length && !section.measures[j].ending && (section.measures[j].text||'').trim() === text) j++;
+      const runLength = j - i;
+      if(runLength >= 3) runs.push({ sectionIdx: sIdx, sectionLabel: section.label, startIdx: i, length: runLength, text });
+      i = j > i ? j : i+1;
+    }
+  });
+  return runs;
+}
+function openCompressRepeatsSheet(){
+  const runs = findCompressibleRuns();
+  if(!runs.length){ toast('No se encontraron compases repetidos seguidos para comprimir'); return; }
+  const rows = runs.map(r=>`
+    <div class="picker-row">
+      <div class="info"><div class="t">"${escapeHtml(r.text)}" × ${r.length} seguidos</div><div class="a">Sección ${escapeHtml(r.sectionLabel||'?')}</div></div>
+    </div>`).join('');
+  openSheetHtml(`
+    <h2>Comprimir repeticiones</h2>
+    <div class="hint" style="margin:-4px 0 8px;">Se encontraron ${runs.length} tramo(s) repetidos seguidos — se reemplazan por "%" (suena exactamente igual, solo queda más corto de leer). No se borra ningún compás.</div>
+    <div class="picker-list" style="max-height:45vh; overflow-y:auto;">${rows}</div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
+      <button class="btn primary" id="btnApplyCompress" style="flex:1;">Comprimir</button>
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.getElementById('btnApplyCompress').addEventListener('click', ()=>{
+    const chart = parseChartText(document.getElementById('fChartText').value);
+    runs.forEach(r=>{
+      const section = chart.sections[r.sectionIdx];
+      for(let k=r.startIdx+1; k<r.startIdx+r.length; k++) section.measures[k].text = '%';
+    });
+    document.getElementById('fChartText').value = chartToText(chart);
+    updateChartPreview();
+    closeSheet();
+    toast(`${runs.length} repetición(es) comprimidas`);
+  });
+}
+document.getElementById('btnCompressRepeats').addEventListener('click', openCompressRepeatsSheet);
 document.getElementById('btnChartTemplates').addEventListener('click', ()=>{
   const rows = CHART_TEMPLATES.map((t,i)=>`
     <div class="picker-row" data-tpl-idx="${i}" style="cursor:pointer;">
@@ -2767,9 +2818,10 @@ document.getElementById('btnCellInsertAfter').addEventListener('click', ()=>inse
 // multi-chord measure) and removes the now-empty slot after it.
 document.getElementById('btnCellMergeNext').addEventListener('click', ()=>{
   if(!cellEditCtx) return;
+  const { sectionIdx } = cellEditCtx;
   commitCellEdit();
   const chart = parseChartText(document.getElementById('fChartText').value);
-  const section = chart.sections[cellEditCtx.sectionIdx];
+  const section = chart.sections[sectionIdx];
   if(!section) return;
   const idx = cellEditCtx.measureIdx;
   if(idx+1 >= section.measures.length){ toast('No hay otro compás después para unir'); return; }
@@ -2780,11 +2832,58 @@ document.getElementById('btnCellMergeNext').addEventListener('click', ()=>{
   section.measures.splice(idx+1, 1);
   document.getElementById('fChartText').value = chartToText(chart);
   updateChartPreview();
-  cellEndingValue = section.measures[idx].ending;
-  updateCellEndingButtons();
-  const inp = injectCellInput(cellEditCtx.sectionIdx, idx, combinedText);
-  if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  cellEditCtx = null; // re-open cleanly through the normal path below, which re-reads the freshly merged measure
+  openCellEdit(sectionIdx, idx, 0);
   toast('Compases unidos');
+});
+// Types a chord once, picks how many times it repeats, and fills that many
+// measures with "%" after it — instead of retyping (or re-picking from the
+// palette) the same chord over and over for a long static passage.
+function repeatCurrentMeasure(times){
+  if(!cellEditCtx || times < 2) return;
+  commitCellEdit();
+  const { sectionIdx, measureIdx } = cellEditCtx;
+  const chart = parseChartText(document.getElementById('fChartText').value);
+  const section = chart.sections[sectionIdx];
+  if(!section) return;
+  const inserts = [];
+  for(let i=0;i<times-1;i++) inserts.push({ text:'%', ending:null });
+  section.measures.splice(measureIdx+1, 0, ...inserts);
+  document.getElementById('fChartText').value = chartToText(chart);
+  updateChartPreview();
+  cellEditCtx = null;
+  closeSheet();
+  openCellEdit(sectionIdx, measureIdx, 0);
+  toast(`Repetido ${times-1} vez(veces) más`);
+}
+document.getElementById('btnCellRepeatTimes').addEventListener('click', ()=>{
+  if(!cellEditCtx) return;
+  const common = [2,3,4,5,6,8];
+  const rows = common.map(n=>`
+    <div class="picker-row" data-repeat-n="${n}" style="cursor:pointer;">
+      <div class="info"><div class="t">× ${n}</div></div>
+    </div>`).join('');
+  openSheetHtml(`
+    <h2>Repetir este compás</h2>
+    <div class="hint" style="margin:-4px 0 8px;">Se agregan los compases que faltan justo después, marcados como repetición del mismo acorde.</div>
+    <div class="picker-list">${rows}</div>
+    <div class="field" style="margin-top:10px;">
+      <label for="repeatTimesCustom">Otra cantidad</label>
+      <input type="text" id="repeatTimesCustom" inputmode="numeric" placeholder="10">
+    </div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
+      <button class="btn primary" id="btnApplyRepeatTimes" style="flex:1;">Usar</button>
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.querySelectorAll('[data-repeat-n]').forEach(row=>{
+    row.addEventListener('click', ()=>repeatCurrentMeasure(Number(row.dataset.repeatN)));
+  });
+  document.getElementById('btnApplyRepeatTimes').addEventListener('click', ()=>{
+    const n = parseInt(document.getElementById('repeatTimesCustom').value, 10);
+    if(!n || n < 2){ toast('Escribe un número de 2 o más'); return; }
+    repeatCurrentMeasure(n);
+  });
 });
 
 /* ---- voice assignment: line-by-line UI instead of manual bracket tags ---- */
