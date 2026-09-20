@@ -1018,6 +1018,8 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <div style="font-size:12px; color:var(--text-dim);">El dedo hace scroll — el lápiz dibuja</div>
     </div>
     <button type="button" class="btn small" id="btnSingerEraser" title="Borrador">Borrador</button>
+    <button type="button" class="btn icon" id="btnSingerFontDown" title="Letra más chica">−</button>
+    <button type="button" class="btn icon" id="btnSingerFontUp" title="Letra más grande">+</button>
     <button type="button" class="btn small" id="btnSingerUndo" title="Deshacer el último trazo">Deshacer</button>
     <button type="button" class="btn small danger" id="btnSingerClear" title="Borrar todas las anotaciones">Borrar todo</button>
   </div>
@@ -2488,6 +2490,7 @@ document.getElementById('btnGenerateFromAudio').addEventListener('click', openAu
    input is left alone so the page scrolls normally under a finger — same
    convention as Apple's own note-taking apps, so there's nothing to toggle. */
 let singerCtx = null, singerDrawing = false, singerCurrentStroke = null, singerErasing = false;
+let singerFontSize = 24;
 function loadSingerAnnotations(song){
   return (song && Array.isArray(song.singerAnnotations)) ? song.singerAnnotations : [];
 }
@@ -2524,6 +2527,8 @@ function openSingerMode(){
   document.body.style.overflow = 'hidden';
   singerErasing = false;
   updateSingerEraserButton();
+  singerFontSize = 24;
+  document.getElementById('singerModeLyrics').style.fontSize = singerFontSize + 'px';
   requestAnimationFrame(redrawSingerCanvas);
 }
 function closeSingerMode(){
@@ -2549,8 +2554,16 @@ function saveSingerAnnotations(strokes){
   const viewport = document.getElementById('singerModeViewport');
   // touch-action is fully off on the canvas (see CSS) so the pencil can
   // never accidentally trigger a native pan — which means finger scrolling
-  // has to be done by hand here instead of relying on the browser for it.
+  // (and now two-finger pinch-zoom) has to be done by hand here instead of
+  // relying on the browser for it.
   let touchScrollStartY = null, touchScrollStartTop = null;
+  const activeTouches = new Map(); // pointerId -> {x,y}, for detecting a 2nd finger (pinch)
+  let pinchStartDistance = null, pinchStartFontSize = null;
+  function touchDistance(){
+    const pts = [...activeTouches.values()];
+    if(pts.length < 2) return null;
+    return Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+  }
   canvas.addEventListener('pointerdown', e=>{
     if(e.pointerType === 'pen'){
       e.preventDefault();
@@ -2564,8 +2577,16 @@ function saveSingerAnnotations(strokes){
       singerCurrentStroke = { points: [pointFromEvent(e, canvas)], color: null, width: 2.5 + (e.pressure||0.5)*2 };
       return;
     }
-    touchScrollStartY = e.clientY;
-    touchScrollStartTop = viewport.scrollTop;
+    activeTouches.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(activeTouches.size === 2){
+      // a second finger just joined -> this is a pinch, not a scroll
+      touchScrollStartY = null;
+      pinchStartDistance = touchDistance();
+      pinchStartFontSize = singerFontSize;
+    } else if(activeTouches.size === 1){
+      touchScrollStartY = e.clientY;
+      touchScrollStartTop = viewport.scrollTop;
+    }
   });
   canvas.addEventListener('pointermove', e=>{
     if(e.pointerType === 'pen'){
@@ -2578,9 +2599,18 @@ function saveSingerAnnotations(strokes){
       drawStroke(singerCurrentStroke, w, h);
       return;
     }
-    if(touchScrollStartY === null || e.buttons === 0) return;
-    e.preventDefault();
-    viewport.scrollTop = touchScrollStartTop - (e.clientY - touchScrollStartY);
+    if(!activeTouches.has(e.pointerId)) return;
+    activeTouches.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(activeTouches.size === 2 && pinchStartDistance){
+      e.preventDefault();
+      const dist = touchDistance();
+      if(dist) setSingerFontSize(pinchStartFontSize * (dist / pinchStartDistance));
+      return;
+    }
+    if(activeTouches.size === 1 && touchScrollStartY !== null){
+      e.preventDefault();
+      viewport.scrollTop = touchScrollStartTop - (e.clientY - touchScrollStartY);
+    }
   });
   function endStroke(e){
     if(e.pointerType === 'pen'){
@@ -2595,7 +2625,16 @@ function saveSingerAnnotations(strokes){
       singerCurrentStroke = null;
       return;
     }
+    activeTouches.delete(e.pointerId);
+    if(activeTouches.size < 2) pinchStartDistance = null;
     touchScrollStartY = null; touchScrollStartTop = null;
+    // if one finger of a pinch lifts but the other stays down, resume that
+    // one as a normal scroll instead of leaving it stuck
+    if(activeTouches.size === 1){
+      const [remaining] = activeTouches.values();
+      touchScrollStartY = remaining.y;
+      touchScrollStartTop = viewport.scrollTop;
+    }
   }
   canvas.addEventListener('pointerup', endStroke);
   canvas.addEventListener('pointercancel', endStroke);
@@ -2619,6 +2658,16 @@ document.getElementById('btnSingerEraser').addEventListener('click', ()=>{
   singerErasing = !singerErasing;
   updateSingerEraserButton();
 });
+function setSingerFontSize(size){
+  singerFontSize = clamp(Math.round(size), 14, 48);
+  document.getElementById('singerModeLyrics').style.fontSize = singerFontSize + 'px';
+  // annotations are stored as coordinates NORMALIZED to the content size, so
+  // just redrawing after the layout reflows keeps them lined up with the
+  // right words automatically — no separate migration needed.
+  requestAnimationFrame(redrawSingerCanvas);
+}
+document.getElementById('btnSingerFontUp').addEventListener('click', ()=>setSingerFontSize(singerFontSize + 2));
+document.getElementById('btnSingerFontDown').addEventListener('click', ()=>setSingerFontSize(singerFontSize - 2));
 document.getElementById('btnSingerUndo').addEventListener('click', ()=>{
   const song = currentPresentSong ? currentPresentSong() : null;
   if(!song) return;
