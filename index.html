@@ -186,10 +186,27 @@ nav#tabbar .brand{display:none;}
 .empty .big{font-size:15px; color:var(--text); margin-bottom:6px; font-weight:600;}
 
 /* ---- fullscreen chord chart editor ---- */
-#chartEditorScreen, #lyricsEditorScreen, #pdfExportScreen, #audioTranscribeScreen{
+#chartEditorScreen, #lyricsEditorScreen, #pdfExportScreen, #audioTranscribeScreen, #singerModeScreen{
   position:fixed; inset:0; z-index:140; background:var(--bg); display:flex; flex-direction:column;
 }
-#chartEditorScreen.hidden, #lyricsEditorScreen.hidden, #pdfExportScreen.hidden, #audioTranscribeScreen.hidden{display:none;}
+#chartEditorScreen.hidden, #lyricsEditorScreen.hidden, #pdfExportScreen.hidden, #audioTranscribeScreen.hidden, #singerModeScreen.hidden{display:none;}
+/* Singer mode: the lyrics and the canvas share one scrollable area, sized to
+   the content's full height (not just the screen) so drawings stay attached
+   to the right line even when the song is longer than one screen. Finger
+   touches pass straight through to that native scroll; only pencil input
+   is captured for drawing (see the pointerType check in JS) — same
+   convention as Apple's own iPad apps, so there's no separate "draw mode"
+   toggle to remember. */
+#singerModeViewport{
+  position:relative; flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
+}
+#singerModeLyrics{
+  padding:24px 22px 40vh; font-family:var(--font-lyrics); font-size:24px; line-height:1.9;
+  color:var(--text); white-space:pre-wrap;
+}
+#singerModeCanvas{
+  position:absolute; top:0; left:0; width:100%; touch-action:pan-y;
+}
 #transcribeLyricsArea{
   flex:1; min-height:0; overflow-y:auto; padding:14px; font-family:var(--font-lyrics);
   font-size:19px; line-height:2.1; -webkit-overflow-scrolling:touch;
@@ -907,6 +924,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
     <button class="btn icon ghost" id="btnExportPdfPresent" title="Exportar esta canción como PDF"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg></button>
     <button class="btn icon ghost hidden" id="btnYoutubePresent" title="Escuchar en YouTube"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4"/><path d="M10 9l5 3-5 3z" fill="var(--bg)" stroke="none"/></svg></button>
     <button class="btn icon ghost" id="btnStageMode" title="Modo escenario"><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.3L18.5 21 12 16.5 5.5 21l2-7.7L2 9h7z"/></svg></button>
+    <button class="btn icon ghost" id="btnSingerMode" title="Modo cantante: solo letra, con anotaciones a lápiz"><svg viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg></button>
   </div>
   <audio id="presentAudioPlayer" class="hidden" controls preload="metadata"></audio>
 
@@ -952,6 +970,24 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <button class="btn small" id="btnToggleChordsPresent">Ocultar acordes</button>
       <button class="btn small" id="btnShowChordsPresent">Ver acordes</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ SINGER MODE: lyrics-only, with pencil annotations ============ -->
+<div id="singerModeScreen" class="hidden">
+  <div class="chart-editor-bar">
+    <button type="button" class="btn icon ghost" id="btnCloseSingerMode" title="Volver"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div style="flex:1; min-width:70px;">
+      <div style="font-size:15px; font-weight:650;">Modo cantante</div>
+      <div style="font-size:12px; color:var(--text-dim);">El dedo hace scroll — el lápiz dibuja</div>
+    </div>
+    <button type="button" class="btn small" id="btnSingerEraser" title="Borrador">Borrador</button>
+    <button type="button" class="btn small" id="btnSingerUndo" title="Deshacer el último trazo">Deshacer</button>
+    <button type="button" class="btn small danger" id="btnSingerClear" title="Borrar todas las anotaciones">Borrar todo</button>
+  </div>
+  <div id="singerModeViewport">
+    <div id="singerModeLyrics"></div>
+    <canvas id="singerModeCanvas"></canvas>
   </div>
 </div>
 
@@ -2407,6 +2443,149 @@ function closeAudioTranscribeScreen(){
   document.body.style.overflow = '';
 }
 document.getElementById('btnGenerateFromAudio').addEventListener('click', openAudioTranscribeScreen);
+
+/* ---- Singer mode: lyrics-only view with pencil annotations ----
+   Strokes are stored as arrays of {x,y} points NORMALIZED to the lyrics
+   content's full scrollable size (0..1 range) rather than raw pixels, so
+   they stay correctly aligned with the text regardless of screen size or
+   how long the song's lyrics happen to be. Pencil input draws; touch/mouse
+   input is left alone so the page scrolls normally under a finger — same
+   convention as Apple's own note-taking apps, so there's nothing to toggle. */
+let singerCtx = null, singerDrawing = false, singerCurrentStroke = null, singerErasing = false;
+function loadSingerAnnotations(song){
+  return (song && Array.isArray(song.singerAnnotations)) ? song.singerAnnotations : [];
+}
+function redrawSingerCanvas(){
+  const canvas = document.getElementById('singerModeCanvas');
+  const lyricsEl = document.getElementById('singerModeLyrics');
+  const w = lyricsEl.clientWidth, h = lyricsEl.scrollHeight;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.height = h + 'px';
+  singerCtx = canvas.getContext('2d');
+  singerCtx.scale(dpr, dpr);
+  singerCtx.lineCap = 'round'; singerCtx.lineJoin = 'round';
+  const song = currentPresentSong ? currentPresentSong() : null;
+  const strokes = loadSingerAnnotations(song);
+  strokes.forEach(stroke=>drawStroke(stroke, w, h));
+}
+function drawStroke(stroke, w, h){
+  if(!stroke.points || stroke.points.length < 2) return;
+  singerCtx.strokeStyle = stroke.color || getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e3a548';
+  singerCtx.lineWidth = stroke.width || 2.5;
+  singerCtx.beginPath();
+  stroke.points.forEach((p,i)=>{
+    const x = p.x * w, y = p.y * h;
+    if(i===0) singerCtx.moveTo(x,y); else singerCtx.lineTo(x,y);
+  });
+  singerCtx.stroke();
+}
+function openSingerMode(){
+  const song = currentPresentSong ? currentPresentSong() : null;
+  if(!song){ toast('Abrí una canción primero'); return; }
+  document.getElementById('singerModeLyrics').textContent = plainLyricsOnly(song.lyrics || '') || '(Esta canción no tiene letra)';
+  document.getElementById('singerModeScreen').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  singerErasing = false;
+  updateSingerEraserButton();
+  requestAnimationFrame(redrawSingerCanvas);
+}
+function closeSingerMode(){
+  document.getElementById('singerModeScreen').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+function updateSingerEraserButton(){
+  document.getElementById('btnSingerEraser').classList.toggle('primary', singerErasing);
+  document.getElementById('btnSingerEraser').textContent = singerErasing ? 'Dibujando' : 'Borrador';
+}
+function pointFromEvent(e, canvas){
+  const rect = canvas.getBoundingClientRect();
+  return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+}
+function saveSingerAnnotations(strokes){
+  const song = currentPresentSong ? currentPresentSong() : null;
+  if(!song) return;
+  song.singerAnnotations = strokes;
+  saveState();
+}
+(function initSingerCanvasEvents(){
+  const canvas = document.getElementById('singerModeCanvas');
+  canvas.addEventListener('pointerdown', e=>{
+    if(e.pointerType !== 'pen') return; // finger/mouse: let the scroll happen, don't touch it
+    e.preventDefault();
+    const song = currentPresentSong ? currentPresentSong() : null;
+    if(!song) return;
+    if(singerErasing){
+      eraseNearPoint(pointFromEvent(e, canvas));
+      return;
+    }
+    singerDrawing = true;
+    singerCurrentStroke = { points: [pointFromEvent(e, canvas)], color: null, width: 2.5 + (e.pressure||0.5)*2 };
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(e.pointerType !== 'pen') return;
+    if(singerErasing && e.buttons > 0){ eraseNearPoint(pointFromEvent(e, canvas)); return; }
+    if(!singerDrawing || !singerCurrentStroke) return;
+    e.preventDefault();
+    singerCurrentStroke.points.push(pointFromEvent(e, canvas));
+    const w = document.getElementById('singerModeLyrics').clientWidth;
+    const h = document.getElementById('singerModeLyrics').scrollHeight;
+    drawStroke(singerCurrentStroke, w, h);
+  });
+  function endStroke(e){
+    if(e.pointerType !== 'pen' || !singerDrawing) return;
+    singerDrawing = false;
+    if(singerCurrentStroke && singerCurrentStroke.points.length > 1){
+      const song = currentPresentSong ? currentPresentSong() : null;
+      const strokes = loadSingerAnnotations(song);
+      strokes.push(singerCurrentStroke);
+      saveSingerAnnotations(strokes);
+    }
+    singerCurrentStroke = null;
+  }
+  canvas.addEventListener('pointerup', endStroke);
+  canvas.addEventListener('pointercancel', endStroke);
+})();
+function eraseNearPoint(pt){
+  const song = currentPresentSong ? currentPresentSong() : null;
+  if(!song) return;
+  const strokes = loadSingerAnnotations(song);
+  const threshold = 0.03; // normalized distance
+  const kept = strokes.filter(stroke=>{
+    return !stroke.points.some(p => Math.hypot(p.x-pt.x, p.y-pt.y) < threshold);
+  });
+  if(kept.length !== strokes.length){
+    saveSingerAnnotations(kept);
+    redrawSingerCanvas();
+  }
+}
+document.getElementById('btnSingerMode').addEventListener('click', openSingerMode);
+document.getElementById('btnCloseSingerMode').addEventListener('click', closeSingerMode);
+document.getElementById('btnSingerEraser').addEventListener('click', ()=>{
+  singerErasing = !singerErasing;
+  updateSingerEraserButton();
+});
+document.getElementById('btnSingerUndo').addEventListener('click', ()=>{
+  const song = currentPresentSong ? currentPresentSong() : null;
+  if(!song) return;
+  const strokes = loadSingerAnnotations(song);
+  if(!strokes.length){ toast('No hay nada para deshacer'); return; }
+  strokes.pop();
+  saveSingerAnnotations(strokes);
+  redrawSingerCanvas();
+});
+document.getElementById('btnSingerClear').addEventListener('click', ()=>{
+  const song = currentPresentSong ? currentPresentSong() : null;
+  if(!song) return;
+  const strokes = loadSingerAnnotations(song);
+  if(!strokes.length){ toast('No hay anotaciones para borrar'); return; }
+  confirmSheet('Borrar todas las anotaciones', '¿Borrar todos los trazos de esta canción?', ()=>{
+    saveSingerAnnotations([]);
+    redrawSingerCanvas();
+    closeSheet();
+    toast('Anotaciones borradas');
+  }, 'Borrar');
+});
 document.getElementById('btnCloseAudioTranscribe').addEventListener('click', closeAudioTranscribeScreen);
 document.getElementById('transcribeLyricsArea').addEventListener('click', e=>{
   const wordEl = e.target.closest('.transcribe-word');
