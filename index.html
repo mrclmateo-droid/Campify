@@ -226,6 +226,26 @@ body.mode-cantante nav#tabbar .mode-musico-only{display:none;}
 #singerModeCanvas{
   position:absolute; top:0; left:0; width:100%; touch-action:none;
 }
+/* Stamped symbols (arrow, text box, slur, pause) live as real DOM elements
+   in their own layer, positioned the exact same anchor-word-relative way
+   the canvas strokes are — so they track a word correctly across zoom too,
+   but can be actual editable text or precisely-shaped SVG rather than
+   freehand pixels. */
+#singerModeSymbolsLayer{position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;}
+.singer-symbol{position:absolute; pointer-events:auto; transform:translate(-50%,-50%);}
+.singer-symbol.arrow svg{width:1.6em; height:1.6em; stroke:var(--accent); fill:none; stroke-width:2;}
+.singer-symbol.slur svg{width:2.4em; height:1.2em; stroke:var(--accent); fill:none; stroke-width:2;}
+.singer-symbol.pause{
+  font-family:var(--font-mono); font-weight:700; font-size:1.3em; color:var(--accent);
+  line-height:1; padding:2px 4px;
+}
+.singer-symbol.textbox{
+  background:#e35a7b; color:#fff; font-size:0.85em; font-weight:600; padding:4px 8px;
+  border-radius:8px; min-width:32px; text-align:center; white-space:nowrap;
+  border:none; outline:none; font-family:inherit;
+}
+.singer-symbol.textbox:focus{outline:2px solid #fff; outline-offset:1px;}
+#singerModeLyrics{position:relative; z-index:1;}
 #transcribeLyricsArea{
   flex:1; min-height:0; overflow-y:auto; padding:14px; font-family:var(--font-lyrics);
   font-size:19px; line-height:2.1; -webkit-overflow-scrolling:touch;
@@ -1015,8 +1035,9 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
     <button type="button" class="btn icon ghost" id="btnCloseSingerMode" title="Volver"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
     <div style="flex:1; min-width:70px;">
       <div style="font-size:15px; font-weight:650;">Modo cantante</div>
-      <div style="font-size:12px; color:var(--text-dim);">El dedo hace scroll — el lápiz dibuja</div>
+      <div style="font-size:12px; color:var(--text-dim);" id="singerModeSubtitle">El dedo hace scroll — el lápiz dibuja</div>
     </div>
+    <button type="button" class="btn small" id="btnSingerSymbols" title="Símbolos para pegar en la letra">Símbolos</button>
     <button type="button" class="btn small" id="btnSingerEraser" title="Borrador">Borrador</button>
     <button type="button" class="btn icon" id="btnSingerFontDown" title="Letra más chica">−</button>
     <button type="button" class="btn icon" id="btnSingerFontUp" title="Letra más grande">+</button>
@@ -1026,6 +1047,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
   <div id="singerModeViewport">
     <div id="singerModeLyrics"></div>
     <canvas id="singerModeCanvas"></canvas>
+    <div id="singerModeSymbolsLayer"></div>
   </div>
 </div>
 
@@ -2494,6 +2516,37 @@ let singerFontSize = 24;
 function loadSingerAnnotations(song){
   return (song && Array.isArray(song.singerAnnotations)) ? song.singerAnnotations : [];
 }
+// Position is stored relative to the specific WORD the stroke was drawn
+// near — not as a fraction of the page — because the page's proportions
+// change unevenly across zoom levels (fixed padding doesn't scale with the
+// text, and word-wrap can reflow into a different number of lines). Finding
+// that word's CURRENT position fresh on every redraw is what actually keeps
+// a mark attached to the right word regardless of zoom.
+function canvasLocalPoint(e, canvas){
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+function findNearestWordIdx(pt){
+  const words = document.querySelectorAll('#singerModeLyrics .singer-word');
+  const canvas = document.getElementById('singerModeCanvas');
+  const canvasRect = canvas.getBoundingClientRect();
+  let best = -1, bestDist = Infinity;
+  words.forEach((el, idx)=>{
+    const r = el.getBoundingClientRect();
+    const d = Math.hypot((r.left - canvasRect.left) - pt.x, (r.top - canvasRect.top) - pt.y);
+    if(d < bestDist){ bestDist = d; best = idx; }
+  });
+  return best;
+}
+function getWordTopLeft(idx){
+  const words = document.querySelectorAll('#singerModeLyrics .singer-word');
+  const el = words[idx];
+  if(!el) return null;
+  const canvas = document.getElementById('singerModeCanvas');
+  const canvasRect = canvas.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  return { x: r.left - canvasRect.left, y: r.top - canvasRect.top };
+}
 function redrawSingerCanvas(){
   const canvas = document.getElementById('singerModeCanvas');
   const lyricsEl = document.getElementById('singerModeLyrics');
@@ -2506,23 +2559,42 @@ function redrawSingerCanvas(){
   singerCtx.lineCap = 'round'; singerCtx.lineJoin = 'round';
   const song = currentPresentSong ? currentPresentSong() : null;
   const strokes = loadSingerAnnotations(song);
-  strokes.forEach(stroke=>drawStroke(stroke, w, h));
+  strokes.forEach(stroke=>drawStroke(stroke));
+  renderSingerSymbols();
 }
-function drawStroke(stroke, w, h){
+function drawStroke(stroke){
   if(!stroke.points || stroke.points.length < 2) return;
+  const anchor = getWordTopLeft(stroke.anchorWordIdx);
+  if(!anchor) return; // the song's lyrics changed enough that this word no longer exists — skip rather than misplace it
+  // dx/dy and line width were stored as multiples of the font-size at draw
+  // time, so multiplying by the CURRENT font-size rescales the whole mark
+  // (not just its position) to match, the same way the text itself does.
   singerCtx.strokeStyle = stroke.color || getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e3a548';
-  singerCtx.lineWidth = stroke.width || 2.5;
+  singerCtx.lineWidth = (stroke.widthEm || 0.1) * singerFontSize;
   singerCtx.beginPath();
   stroke.points.forEach((p,i)=>{
-    const x = p.x * w, y = p.y * h;
+    const x = anchor.x + p.dx * singerFontSize, y = anchor.y + p.dy * singerFontSize;
     if(i===0) singerCtx.moveTo(x,y); else singerCtx.lineTo(x,y);
   });
   singerCtx.stroke();
 }
+function renderSingerLyricsWords(text){
+  const container = document.getElementById('singerModeLyrics');
+  if(!text){ container.textContent = '(Esta canción no tiene letra)'; return; }
+  const lines = text.split('\n');
+  container.innerHTML = lines.map(line=>{
+    if(!line.trim()) return '<br>';
+    const parts = line.split(/(\s+)/).filter(p=>p.length);
+    return parts.map(p=>{
+      if(!p.trim()) return p;
+      return `<span class="singer-word">${escapeHtml(p)}</span>`;
+    }).join('') + '<br>';
+  }).join('');
+}
 function openSingerMode(){
   const song = currentPresentSong ? currentPresentSong() : null;
   if(!song){ toast('Abrí una canción primero'); return; }
-  document.getElementById('singerModeLyrics').textContent = plainLyricsOnly(song.lyrics || '') || '(Esta canción no tiene letra)';
+  renderSingerLyricsWords(plainLyricsOnly(song.lyrics || ''));
   document.getElementById('singerModeScreen').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   singerErasing = false;
@@ -2534,15 +2606,148 @@ function openSingerMode(){
 function closeSingerMode(){
   document.getElementById('singerModeScreen').classList.add('hidden');
   document.body.style.overflow = '';
+  singerArmedSymbol = null;
 }
 function updateSingerEraserButton(){
   document.getElementById('btnSingerEraser').classList.toggle('primary', singerErasing);
   document.getElementById('btnSingerEraser').textContent = singerErasing ? 'Dibujando' : 'Borrador';
 }
-function pointFromEvent(e, canvas){
-  const rect = canvas.getBoundingClientRect();
-  return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+
+/* ---- stamped symbols (arrow, text box, slur, pause) ----
+   For phone use without a pencil: pick a symbol from the palette, then tap
+   anywhere on the lyrics (finger is fine) to place it there. Uses the exact
+   same "anchor to the nearest word" system as freehand strokes, just
+   rendered as real DOM elements instead of canvas pixels — needed anyway
+   for the text box, which has to accept typed text. */
+let singerArmedSymbol = null;
+const SINGER_SYMBOL_TYPES = {
+  arrow: { label:'Flecha', icon:'<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>' },
+  slur:  { label:'Ligadura (unir sílabas)', icon:'<svg viewBox="0 0 24 24"><path d="M4 8c4 8 12 8 16 0"/></svg>' },
+  pause: { label:'Barra de pausa', icon:'<span style="font-family:var(--font-mono); font-weight:700; font-size:18px;">//</span>' },
+  textbox: { label:'Cuadro de texto', icon:'<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 12h10"/></svg>' }
+};
+function openSymbolPicker(){
+  const rows = Object.entries(SINGER_SYMBOL_TYPES).map(([type, def])=>`
+    <div class="picker-row" data-symbol-type="${type}" style="cursor:pointer; gap:12px;">
+      <span style="width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:var(--accent); flex:none;">${def.icon}</span>
+      <div class="info"><div class="t">${def.label}</div></div>
+    </div>`).join('');
+  openSheetHtml(`
+    <h2>Símbolos</h2>
+    <div class="hint" style="margin:-4px 0 8px;">Elegí uno y después tocá la letra donde querés pegarlo. Podés seguir pegando el mismo tocando varias veces, sin volver a abrir este menú.</div>
+    <div class="picker-list">${rows}</div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
+      ${singerArmedSymbol ? '<button class="btn danger" id="btnUnarmSymbol" style="flex:1;">Dejar de pegar</button>' : ''}
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.querySelectorAll('[data-symbol-type]').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      singerArmedSymbol = row.dataset.symbolType;
+      singerErasing = false;
+      updateSingerEraserButton();
+      updateSingerModeSubtitle();
+      closeSheet();
+    });
+  });
+  const unarmBtn = document.getElementById('btnUnarmSymbol');
+  if(unarmBtn) unarmBtn.addEventListener('click', ()=>{
+    singerArmedSymbol = null;
+    updateSingerModeSubtitle();
+    closeSheet();
+  });
 }
+function updateSingerModeSubtitle(){
+  const el = document.getElementById('singerModeSubtitle');
+  if(singerArmedSymbol){
+    el.textContent = `Tocá la letra para pegar: ${SINGER_SYMBOL_TYPES[singerArmedSymbol].label}`;
+  } else {
+    el.textContent = 'El dedo hace scroll — el lápiz dibuja';
+  }
+}
+function loadSingerSymbols(song){
+  return (song && Array.isArray(song.singerSymbols)) ? song.singerSymbols : [];
+}
+function saveSingerSymbols(symbols){
+  const song = currentPresentSong ? currentPresentSong() : null;
+  if(!song) return;
+  song.singerSymbols = symbols;
+  saveState();
+}
+function placeSymbolAt(pt){
+  const anchorIdx = findNearestWordIdx(pt);
+  const anchor = getWordTopLeft(anchorIdx);
+  if(anchorIdx < 0 || !anchor) return;
+  const song = currentPresentSong ? currentPresentSong() : null;
+  if(!song) return;
+  const symbols = loadSingerSymbols(song);
+  const sym = {
+    id: 'sym_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+    type: singerArmedSymbol,
+    anchorWordIdx: anchorIdx,
+    dx: (pt.x - anchor.x) / singerFontSize,
+    dy: (pt.y - anchor.y) / singerFontSize,
+    text: singerArmedSymbol === 'textbox' ? '' : undefined
+  };
+  symbols.push(sym);
+  saveSingerSymbols(symbols);
+  renderSingerSymbols();
+  if(sym.type === 'textbox'){
+    requestAnimationFrame(()=>{
+      const el = document.querySelector(`[data-symbol-id="${sym.id}"] .singer-symbol`);
+      if(el) el.focus();
+    });
+  }
+}
+function renderSingerSymbols(){
+  const layer = document.getElementById('singerModeSymbolsLayer');
+  const song = currentPresentSong ? currentPresentSong() : null;
+  const symbols = loadSingerSymbols(song);
+  layer.innerHTML = '';
+  symbols.forEach(sym=>{
+    const anchor = getWordTopLeft(sym.anchorWordIdx);
+    if(!anchor) return; // the word this was pegged to no longer exists — skip rather than misplace
+    const x = anchor.x + sym.dx * singerFontSize, y = anchor.y + sym.dy * singerFontSize;
+    const wrap = document.createElement('div');
+    wrap.dataset.symbolId = sym.id;
+    wrap.style.position = 'absolute';
+    wrap.style.left = x + 'px';
+    wrap.style.top = y + 'px';
+    wrap.style.fontSize = singerFontSize + 'px'; // symbol sizes are in em, so this scales them with zoom too
+    if(sym.type === 'textbox'){
+      const box = document.createElement('div');
+      box.className = 'singer-symbol textbox';
+      box.contentEditable = 'true';
+      box.textContent = sym.text || '';
+      box.addEventListener('pointerdown', e=>e.stopPropagation()); // typing shouldn't also trigger "place a new symbol here"
+      box.addEventListener('blur', ()=>{
+        sym.text = box.textContent.trim();
+        saveSingerSymbols(symbols);
+      });
+      wrap.appendChild(box);
+    } else {
+      const el = document.createElement('div');
+      el.className = 'singer-symbol ' + sym.type;
+      el.innerHTML = SINGER_SYMBOL_TYPES[sym.type].icon;
+      el.addEventListener('pointerdown', e=>{
+        e.stopPropagation();
+        if(singerErasing){
+          const idx = symbols.indexOf(sym);
+          if(idx > -1){ symbols.splice(idx,1); saveSingerSymbols(symbols); renderSingerSymbols(); }
+        }
+      });
+      wrap.appendChild(el);
+    }
+    layer.appendChild(wrap);
+  });
+}
+document.getElementById('btnSingerSymbols').addEventListener('click', openSymbolPicker);
+document.getElementById('singerModeViewport').addEventListener('click', e=>{
+  if(!singerArmedSymbol) return;
+  if(e.target.closest('.singer-symbol')) return; // tapping an existing symbol is handled by its own listener
+  const canvas = document.getElementById('singerModeCanvas');
+  placeSymbolAt(canvasLocalPoint(e, canvas));
+});
 function saveSingerAnnotations(strokes){
   const song = currentPresentSong ? currentPresentSong() : null;
   if(!song) return;
@@ -2552,6 +2757,14 @@ function saveSingerAnnotations(strokes){
 (function initSingerCanvasEvents(){
   const canvas = document.getElementById('singerModeCanvas');
   const viewport = document.getElementById('singerModeViewport');
+  // Safari has its own older, separate pinch-zoom detection (the
+  // gesturestart/gesturechange/gestureend events) that can still zoom the
+  // whole page even when touch-action correctly blocks the standard touch
+  // gesture — this shuts that down too so our own pinch handling below is
+  // the only thing that reacts to two fingers on the canvas.
+  ['gesturestart','gesturechange','gestureend'].forEach(evt=>{
+    canvas.addEventListener(evt, e=>e.preventDefault());
+  });
   // touch-action is fully off on the canvas (see CSS) so the pencil can
   // never accidentally trigger a native pan — which means finger scrolling
   // (and now two-finger pinch-zoom) has to be done by hand here instead of
@@ -2569,12 +2782,21 @@ function saveSingerAnnotations(strokes){
       e.preventDefault();
       const song = currentPresentSong ? currentPresentSong() : null;
       if(!song) return;
+      const pt = canvasLocalPoint(e, canvas);
       if(singerErasing){
-        eraseNearPoint(pointFromEvent(e, canvas));
+        eraseNearPoint(pt);
         return;
       }
+      const anchorIdx = findNearestWordIdx(pt);
+      const anchor = getWordTopLeft(anchorIdx);
+      if(anchorIdx < 0 || !anchor) return; // no words on screen to anchor to (e.g. blank lyrics) — nothing sensible to draw against
       singerDrawing = true;
-      singerCurrentStroke = { points: [pointFromEvent(e, canvas)], color: null, width: 2.5 + (e.pressure||0.5)*2 };
+      singerCurrentStroke = {
+        anchorWordIdx: anchorIdx,
+        points: [{ dx: (pt.x - anchor.x) / singerFontSize, dy: (pt.y - anchor.y) / singerFontSize }],
+        color: null,
+        widthEm: (2.5 + (e.pressure||0.5)*2) / singerFontSize
+      };
       return;
     }
     activeTouches.set(e.pointerId, {x:e.clientX, y:e.clientY});
@@ -2590,13 +2812,14 @@ function saveSingerAnnotations(strokes){
   });
   canvas.addEventListener('pointermove', e=>{
     if(e.pointerType === 'pen'){
-      if(singerErasing && e.buttons > 0){ eraseNearPoint(pointFromEvent(e, canvas)); return; }
+      if(singerErasing && e.buttons > 0){ eraseNearPoint(canvasLocalPoint(e, canvas)); return; }
       if(!singerDrawing || !singerCurrentStroke) return;
       e.preventDefault();
-      singerCurrentStroke.points.push(pointFromEvent(e, canvas));
-      const w = document.getElementById('singerModeLyrics').clientWidth;
-      const h = document.getElementById('singerModeLyrics').scrollHeight;
-      drawStroke(singerCurrentStroke, w, h);
+      const anchor = getWordTopLeft(singerCurrentStroke.anchorWordIdx);
+      if(!anchor) return;
+      const pt = canvasLocalPoint(e, canvas);
+      singerCurrentStroke.points.push({ dx: (pt.x - anchor.x) / singerFontSize, dy: (pt.y - anchor.y) / singerFontSize });
+      drawStroke(singerCurrentStroke);
       return;
     }
     if(!activeTouches.has(e.pointerId)) return;
@@ -2643,9 +2866,14 @@ function eraseNearPoint(pt){
   const song = currentPresentSong ? currentPresentSong() : null;
   if(!song) return;
   const strokes = loadSingerAnnotations(song);
-  const threshold = 0.03; // normalized distance
+  const threshold = 0.35 * singerFontSize; // scales with zoom, like everything else here
   const kept = strokes.filter(stroke=>{
-    return !stroke.points.some(p => Math.hypot(p.x-pt.x, p.y-pt.y) < threshold);
+    const anchor = getWordTopLeft(stroke.anchorWordIdx);
+    if(!anchor) return true; // can't resolve it anymore — leave it alone rather than guess
+    return !stroke.points.some(p=>{
+      const x = anchor.x + p.dx * singerFontSize, y = anchor.y + p.dy * singerFontSize;
+      return Math.hypot(x-pt.x, y-pt.y) < threshold;
+    });
   });
   if(kept.length !== strokes.length){
     saveSingerAnnotations(kept);
@@ -4939,7 +5167,8 @@ function renderLyrics(song){
 }
 
 function applyShowChords(){
-  lyricsContent.classList.toggle('hide-chords', !state.settings.showChords);
+  const forceHide = ui.appMode === 'cantante';
+  lyricsContent.classList.toggle('hide-chords', forceHide || !state.settings.showChords);
   document.getElementById('btnToggleChordsPresent').textContent = state.settings.showChords ? 'Ocultar acordes' : 'Mostrar acordes';
 }
 
