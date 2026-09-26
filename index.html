@@ -232,25 +232,46 @@ body.mode-cantante nav#tabbar .mode-musico-only{display:none;}
    but can be actual editable text or precisely-shaped SVG rather than
    freehand pixels. */
 #singerModeSymbolsLayer{position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:2;}
-.singer-symbol{position:absolute; pointer-events:auto; transform:translate(-50%,-50%);}
-.singer-symbol svg{width:1.6em; height:1.6em; stroke:var(--accent); fill:none; stroke-width:2; display:block;}
-.singer-symbol.slur svg,
-.singer-symbol.vibrato svg,
-.singer-symbol.crescendo svg,
-.singer-symbol.decrescendo svg,
-.singer-symbol.circle svg{width:2.4em; height:1.2em;}
-.singer-symbol.staccato svg{stroke:none; fill:var(--accent);}
-.singer-symbol.pause{
-  font-family:var(--font-mono); font-weight:700; font-size:1.3em; color:var(--accent);
-  line-height:1; padding:2px 4px;
+.singer-symbol{
+  position:absolute; pointer-events:auto; transform:translate(-50%,-50%);
+  color:#ffd400; text-shadow:0 1px 3px rgba(0,0,0,.6);
+}
+.singer-symbol svg{width:1.8em; height:1.8em; stroke:#ffd400; fill:none; stroke-width:2.4; display:block; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));}
+.singer-symbol-glyph{
+  font-family:var(--font-mono); font-weight:800; font-size:1.5em; line-height:1;
+  display:block; white-space:nowrap;
 }
 .singer-symbol.textbox{
   background:#e35a7b; color:#fff; font-size:0.85em; font-weight:600; padding:4px 8px;
   border-radius:8px; min-width:32px; text-align:center; white-space:nowrap;
-  border:none; outline:none; font-family:inherit;
+  border:none; outline:none; font-family:inherit; text-shadow:none;
 }
 .singer-symbol.textbox:focus{outline:2px solid #fff; outline-offset:1px;}
 #singerModeLyrics{position:relative; z-index:1;}
+/* The quick-pick popup deploys right where you tapped, not as a generic
+   sheet from the bottom — same fixed-position, follow-the-touch pattern as
+   the chord-suggestion popup in the chart editor. */
+#symbolQuickPopup{
+  position:fixed; z-index:210; background:var(--bg-elev-2); border:1px solid var(--border);
+  border-radius:14px; padding:10px; box-shadow:0 8px 22px rgba(0,0,0,.5);
+}
+#symbolQuickPopup.hidden{display:none;}
+.symbol-quick-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:6px;}
+.symbol-quick-btn{
+  background:var(--bg-elev); border:1px solid var(--border); border-radius:10px;
+  min-height:52px; display:flex; align-items:center; justify-content:center;
+  color:#ffd400; cursor:pointer; padding:6px;
+}
+.symbol-quick-btn:active{background:var(--bg-elev-3);}
+.symbol-quick-btn svg{width:1.6em; height:1.6em; stroke:#ffd400; fill:none; stroke-width:2.2;}
+.symbol-quick-btn .singer-symbol-glyph{font-size:1.3em;}
+.symbol-guide-brand{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+.symbol-guide-brand img{width:32px; height:32px; border-radius:8px;}
+.symbol-guide-brand span{font-family:var(--font-ui); font-weight:700; font-size:16px; color:var(--text);}
+.symbol-guide-icon{
+  width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+  color:#ffd400; flex:none;
+}
 #transcribeLyricsArea{
   flex:1; min-height:0; overflow-y:auto; padding:14px; font-family:var(--font-lyrics);
   font-size:19px; line-height:2.1; -webkit-overflow-scrolling:touch;
@@ -1053,6 +1074,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
     <div id="singerModeLyrics"></div>
     <canvas id="singerModeCanvas"></canvas>
     <div id="singerModeSymbolsLayer"></div>
+    <div id="symbolQuickPopup" class="hidden"></div>
   </div>
 </div>
 
@@ -2623,65 +2645,104 @@ function updateSingerEraserButton(){
    same "anchor to the nearest word" system as freehand strokes, just
    rendered as real DOM elements instead of canvas pixels — needed anyway
    for the text box, which has to accept typed text. */
+// Your own personal notation system (from the uploaded guide), not
+// something invented here — same glyphs, same meanings. The 6 marked
+// common:true are a judgment call on which get used most often; the rest
+// sit behind "Ver todos" plus the free-text option for anything that
+// doesn't fit a fixed symbol.
 const SINGER_SYMBOL_TYPES = {
-  arrowRight: { label:'Flecha →', guide:'Señalar hacia dónde sigue, o hacia una palabra específica.', icon:'<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>' },
-  arrowLeft:  { label:'Flecha ←', guide:'Igual que la flecha derecha, apuntando para el otro lado.', icon:'<svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>' },
-  arrowUp:    { label:'Flecha ↑', guide:'Marcar que la voz sube — un salto hacia una nota más aguda.', icon:'<svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>' },
-  arrowDown:  { label:'Flecha ↓', guide:'Marcar que la voz baja — un salto hacia una nota más grave.', icon:'<svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>' },
-  curveUp:    { label:'Curva ascendente', guide:'La voz se desliza para arriba dentro de una misma nota sostenida (no un salto, un deslizamiento).', icon:'<svg viewBox="0 0 24 24"><path d="M4 18C10 18 10 6 20 6M15 4l5 2-2 5"/></svg>' },
-  curveDown:  { label:'Curva descendente', guide:'La voz se desliza para abajo dentro de una misma nota sostenida.', icon:'<svg viewBox="0 0 24 24"><path d="M4 6C10 6 10 18 20 18M15 20l5-2-2-5"/></svg>' },
-  glissando:  { label:'Glissando', guide:'Deslizamiento continuo y marcado entre dos notas, sin escalones — una línea diagonal derecha.', icon:'<svg viewBox="0 0 24 24"><path d="M5 19L19 5M14 5h5v5"/></svg>' },
-  slur:       { label:'Ligadura', guide:'Unir dos sílabas cantadas sin cortar el sonido entre ellas.', icon:'<svg viewBox="0 0 24 24"><path d="M4 8c4 8 12 8 16 0"/></svg>' },
-  breath:     { label:'Respiración', guide:'Marca estándar para indicar dónde respirar — como una comita elevada.', icon:'<span style="font-family:Georgia,serif; font-weight:700; font-size:22px; font-style:italic;">\'</span>' },
-  pause:      { label:'Barra de pausa', guide:'Silencio o corte breve antes de seguir.', icon:'<span style="font-family:var(--font-mono); font-weight:700; font-size:18px;">//</span>' },
-  sustain:    { label:'Nota sostenida', guide:'Estirar esa sílaba más de lo normal — se alarga la nota.', icon:'<svg viewBox="0 0 24 24"><path d="M3 12h18" stroke-width="3"/></svg>' },
-  vibrato:    { label:'Vibrato', guide:'Meter vibrato (la ondulación típica de la voz sostenida) en esa parte.', icon:'<svg viewBox="0 0 24 24"><path d="M2 12c2-4 4 4 6 0s4 4 6 0 4 4 6 0 4 4 6 0"/></svg>' },
-  staccato:   { label:'Staccato', guide:'Nota corta y cortada — lo opuesto a sostener.', icon:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>' },
-  accent:     { label:'Acento fuerte', guide:'Pegarle más fuerte a esa sílaba en particular.', icon:'<svg viewBox="0 0 24 24"><path d="M4 8l16 4-16 4"/></svg>' },
-  crescendo:  { label:'Crescendo <', guide:'Ir subiendo el volumen a lo largo de la frase.', icon:'<svg viewBox="0 0 24 24"><path d="M4 12l16-7v14z" fill="none"/></svg>' },
-  decrescendo:{ label:'Decrescendo >', guide:'Ir bajando el volumen a lo largo de la frase.', icon:'<svg viewBox="0 0 24 24"><path d="M20 12L4 5v14z" fill="none"/></svg>' },
-  falsetto:   { label:'Falsete', guide:'Cambiar a voz de falsete / voz de cabeza en esa parte.', icon:'<svg viewBox="0 0 24 24"><circle cx="9" cy="17" r="3"/><path d="M12 17V5l7-2v12"/><circle cx="19" cy="15" r="3" fill="none" stroke-dasharray="2 2"/></svg>' },
-  repeat:     { label:'Repetir', guide:'Volver a este punto — repetir desde acá.', icon:'<svg viewBox="0 0 24 24"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/></svg>' },
-  check:      { label:'Aprobado', guide:'Marcar que esa parte ya te sale bien, sin necesitar más repaso.', icon:'<svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>' },
-  circle:     { label:'Resaltar', guide:'Marcar una palabra o frase para prestarle atención especial.', icon:'<svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="6"/></svg>' },
-  textbox:    { label:'Cuadro de texto', guide:'Escribir cualquier nota corta a mano (lo que no entra en los símbolos de arriba).', icon:'<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 12h10"/></svg>' }
+  breath:        { glyph:'○', label:'Respirar', guide:'Tomar aire en ese punto.', common:true },
+  sustain:       { glyph:'—', label:'Sostener nota', guide:'Alargar la sílaba o nota.', common:true },
+  slur:          { glyph:'⌣', label:'Ligado', guide:'Unir las sílabas o palabras sin cortar.', common:true, svgIcon:'<svg viewBox="0 0 24 24"><path d="M4 8c4 8 12 8 16 0"/></svg>' },
+  pitchUp:       { glyph:'T↑', label:'Subir tono', guide:'Ir hacia una nota más aguda.', common:true },
+  pitchDown:     { glyph:'T↓', label:'Bajar tono', guide:'Ir hacia una nota más grave.', common:true },
+  accent:        { glyph:'!', label:'Acentuar', guide:'Dar énfasis o ataque a esa palabra o nota.', common:true },
+  pauseShort:    { glyph:'/', label:'Pausa corta', guide:'Hacer un corte breve.' },
+  pauseMarked:   { glyph:'//', label:'Pausa marcada', guide:'Dejar un silencio más evidente.' },
+  pitchUpGrad:   { glyph:'↗', label:'Subida progresiva de tono', guide:'La melodía va subiendo gradualmente.' },
+  pitchDownGrad: { glyph:'↘', label:'Bajada progresiva de tono', guide:'La melodía va bajando gradualmente.' },
+  sustainLong:   { glyph:'——', label:'Sostener mucho', guide:'Mantener una nota claramente larga.' },
+  volumeUp:      { glyph:'V↑', label:'Subir volumen', guide:'Cantar con más volumen desde ese punto.' },
+  volumeDown:    { glyph:'V↓', label:'Bajar volumen', guide:'Cantar con menos volumen desde ese punto.' },
+  volumeUpGrad:  { glyph:'>↑', label:'Subir volumen progresivamente', guide:'Ir aumentando el volumen de forma gradual.' },
+  volumeDownGrad:{ glyph:'<↓', label:'Bajar volumen progresivamente', guide:'Ir disminuyendo el volumen de forma gradual.' },
+  vibrato:       { glyph:'~', label:'Vibrato', guide:'Usar o mantener vibrato.' },
+  pedalNote:     { glyph:'P——', label:'Nota pedal', guide:'Mantener la misma altura mientras lo demás cambia.' },
+  textbox:       { label:'Cuadro de texto', guide:'Escribir cualquier nota corta a mano — lo que no entra en un símbolo fijo.', svgIcon:'<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 12h10"/></svg>' }
 };
+function symbolIconHtml(type){
+  const def = SINGER_SYMBOL_TYPES[type];
+  if(def.svgIcon) return def.svgIcon;
+  return `<span class="singer-symbol-glyph">${escapeHtml(def.glyph)}</span>`;
+}
+
 // Tap the lyrics wherever you want to mark something, THEN pick which
 // symbol goes there — reversed from picking a symbol first, since the
 // "what do I want to mark here" question naturally comes before "which icon
 // says that best".
-function openSymbolPickerAt(pt){
-  const rows = Object.entries(SINGER_SYMBOL_TYPES).map(([type, def])=>`
-    <div class="picker-row" data-symbol-type="${type}" style="cursor:pointer; gap:12px;">
-      <span style="width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:var(--accent); flex:none;">${def.icon}</span>
-      <div class="info"><div class="t">${def.label}</div><div class="a">${def.guide}</div></div>
-    </div>`).join('');
-  openSheetHtml(`
-    <h2>¿Qué querés marcar acá?</h2>
-    <div class="picker-list" style="max-height:65vh; overflow-y:auto;">${rows}</div>
-    <div class="sheet-actions">
-      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
-    </div>`);
-  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
-  document.querySelectorAll('[data-symbol-type]').forEach(row=>{
-    row.addEventListener('click', ()=>{
-      placeSymbolAt(pt, row.dataset.symbolType);
-      closeSheet();
+// Deploys right where you tapped (not a generic bottom sheet) — shows the 6
+// most-used symbols first, with "Ver todos" opening the rest plus the free
+// text option, so the common case is a single tap away.
+function openSymbolPickerAt(pt, anchorClientPt){
+  const popup = document.getElementById('symbolQuickPopup');
+  const popupWidth = 232; // fits 3 per row comfortably; matches the CSS grid below
+  function repositionPopup(){
+    popup.style.left = '8px'; popup.style.top = '8px'; // reset so the measurement below isn't clamped by the OLD position
+    const rect = popup.getBoundingClientRect();
+    let left = anchorClientPt.x - popupWidth/2;
+    left = Math.max(8, Math.min(left, window.innerWidth - popupWidth - 8));
+    let top = anchorClientPt.y + 16;
+    if(top + rect.height > window.innerHeight - 12){
+      top = Math.max(8, anchorClientPt.y - rect.height - 16);
+    }
+    top = Math.min(top, window.innerHeight - rect.height - 8);
+    popup.style.left = left + 'px';
+    popup.style.top = Math.max(8, top) + 'px';
+  }
+  function renderTier(showAll){
+    const entries = Object.entries(SINGER_SYMBOL_TYPES).filter(([type,def])=> showAll || def.common);
+    const grid = entries.map(([type,def])=>`
+      <button type="button" class="symbol-quick-btn" data-symbol-type="${type}" title="${escapeHtml(def.label)}">
+        ${symbolIconHtml(type)}
+      </button>`).join('');
+    popup.innerHTML = `
+      <div class="symbol-quick-grid" style="${showAll ? 'max-height:60vh; overflow-y:auto;' : ''}">${grid}</div>
+      ${showAll ? '' : '<button type="button" class="btn small" id="btnSymbolSeeAll" style="width:100%; margin-top:6px;">Ver todos</button>'}
+    `;
+    popup.querySelectorAll('[data-symbol-type]').forEach(btn=>{
+      btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        placeSymbolAt(pt, btn.dataset.symbolType);
+        closeSymbolQuickPopup();
+      });
     });
-  });
+    const seeAllBtn = document.getElementById('btnSymbolSeeAll');
+    if(seeAllBtn) seeAllBtn.addEventListener('click', e=>{ e.stopPropagation(); renderTier(true); requestAnimationFrame(repositionPopup); });
+  }
+  renderTier(false);
+  popup.classList.remove('hidden');
+  popup.style.width = popupWidth + 'px';
+  requestAnimationFrame(repositionPopup);
 }
-// The toolbar "Símbolos" button, separately, just shows what each one means
-// — a reference you can check any time, without it trying to place anything.
+function closeSymbolQuickPopup(){
+  document.getElementById('symbolQuickPopup').classList.add('hidden');
+}
+// The toolbar "Símbolos" button, separately, opens a full reference of what
+// each one means — doesn't place anything, just there to check any time.
 function openSymbolGuide(){
   const rows = Object.entries(SINGER_SYMBOL_TYPES).map(([type, def])=>`
     <div class="picker-row" style="gap:12px;">
-      <span style="width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:var(--accent); flex:none;">${def.icon}</span>
-      <div class="info"><div class="t">${def.label}</div><div class="a">${def.guide}</div></div>
+      <span class="symbol-guide-icon">${symbolIconHtml(type)}</span>
+      <div class="info"><div class="t">${escapeHtml(def.label)}</div><div class="a">${escapeHtml(def.guide)}</div></div>
     </div>`).join('');
   openSheetHtml(`
+    <div class="symbol-guide-brand">
+      <img src="icon-180.png" alt="">
+      <span>CRO-Chords</span>
+    </div>
     <h2>Guía de símbolos</h2>
-    <div class="hint" style="margin:-4px 0 8px;">Para pegar uno, tocá la letra en el lugar donde querés marcarlo — ahí te va a aparecer esta misma lista para elegir.</div>
-    <div class="picker-list" style="max-height:65vh; overflow-y:auto;">${rows}</div>
+    <div class="hint" style="margin:-4px 0 8px;">Para pegar uno, tocá la letra en el lugar donde querés marcarlo.</div>
+    <div class="picker-list" style="max-height:60vh; overflow-y:auto;">${rows}</div>
     <div class="sheet-actions">
       <button class="btn primary" id="sheetOk" style="flex:1;">Listo</button>
     </div>`);
@@ -2749,8 +2810,8 @@ function renderSingerSymbols(){
       wrap.appendChild(box);
     } else {
       const el = document.createElement('div');
-      el.className = 'singer-symbol ' + sym.type;
-      el.innerHTML = SINGER_SYMBOL_TYPES[sym.type].icon;
+      el.className = 'singer-symbol';
+      el.innerHTML = symbolIconHtml(sym.type);
       el.addEventListener('pointerdown', e=>{
         e.stopPropagation();
         if(singerErasing){
@@ -2766,8 +2827,10 @@ function renderSingerSymbols(){
 document.getElementById('btnSingerSymbols').addEventListener('click', openSymbolGuide);
 document.getElementById('singerModeViewport').addEventListener('click', e=>{
   if(e.target.closest('.singer-symbol')) return; // tapping an existing symbol is handled by its own listener
+  if(e.target.closest('#symbolQuickPopup')) return;
+  if(!document.getElementById('symbolQuickPopup').classList.contains('hidden')){ closeSymbolQuickPopup(); return; } // tapping elsewhere just dismisses an open popup
   const canvas = document.getElementById('singerModeCanvas');
-  openSymbolPickerAt(canvasLocalPoint(e, canvas));
+  openSymbolPickerAt(canvasLocalPoint(e, canvas), { x: e.clientX, y: e.clientY });
 });
 function saveSingerAnnotations(strokes){
   const song = currentPresentSong ? currentPresentSong() : null;
