@@ -2767,6 +2767,13 @@ function saveSingerSymbols(symbols){
   saveState();
 }
 const SYMBOL_MIN_GAP_EM = 1.05; // keeps a symbol clear of the text line itself either above or below it
+// A symbol's DISTANCE from its anchor word is stored against this FIXED
+// reference size, not the live singerFontSize — otherwise a symbol you'd
+// dragged a little to the side would drift further away every time you
+// zoomed in, since its offset would scale right along with the text. The
+// symbol's own visual SIZE still scales with zoom (that's plain em units in
+// the CSS); only its distance from the word it's pegged to stays put.
+const SINGER_SYMBOL_REF_SIZE = 24;
 function clampSymbolDy(dy){
   if(dy > -SYMBOL_MIN_GAP_EM && dy < SYMBOL_MIN_GAP_EM){
     return dy <= 0 ? -SYMBOL_MIN_GAP_EM : SYMBOL_MIN_GAP_EM;
@@ -2803,7 +2810,7 @@ function placeSymbolAt(pt, type){
     id: 'sym_' + Date.now() + '_' + Math.floor(Math.random()*1000),
     type: type,
     anchorWordIdx: anchorIdx,
-    dx: (pt.x - anchor.x) / singerFontSize,
+    dx: (pt.x - anchor.x) / SINGER_SYMBOL_REF_SIZE,
     dy: -SYMBOL_MIN_GAP_EM, // starts just above the word — never on top of the text itself
     text: type === 'textbox' ? '' : undefined
   };
@@ -2825,7 +2832,7 @@ function renderSingerSymbols(){
   symbols.forEach(sym=>{
     const anchor = getWordTopLeft(sym.anchorWordIdx);
     if(!anchor) return; // the word this was pegged to no longer exists — skip rather than misplace
-    const x = anchor.x + sym.dx * singerFontSize, y = anchor.y + sym.dy * singerFontSize;
+    const x = anchor.x + sym.dx * SINGER_SYMBOL_REF_SIZE, y = anchor.y + sym.dy * SINGER_SYMBOL_REF_SIZE;
     const wrap = document.createElement('div');
     wrap.dataset.symbolId = sym.id;
     wrap.style.position = 'absolute';
@@ -2869,15 +2876,15 @@ function renderSingerSymbols(){
       e.preventDefault();
       const newX = x + ddx, newY = y + ddy;
       wrap.style.left = newX + 'px';
-      wrap.style.top = clampSymbolDy((newY - anchor.y)/singerFontSize) * singerFontSize + anchor.y + 'px';
+      wrap.style.top = clampSymbolDy((newY - anchor.y)/SINGER_SYMBOL_REF_SIZE) * SINGER_SYMBOL_REF_SIZE + anchor.y + 'px';
     }
     function onPointerUp(e){
       if(!dragging) return;
       dragging = false;
       if(moved){
         const ddx = e.clientX - dragStartX, ddy = e.clientY - dragStartY;
-        sym.dx = (x + ddx - anchor.x) / singerFontSize;
-        sym.dy = clampSymbolDy((y + ddy - anchor.y) / singerFontSize);
+        sym.dx = (x + ddx - anchor.x) / SINGER_SYMBOL_REF_SIZE;
+        sym.dy = clampSymbolDy((y + ddy - anchor.y) / SINGER_SYMBOL_REF_SIZE);
         saveSingerSymbols(symbols);
         renderSingerSymbols();
       } else if(sym.type !== 'textbox'){
