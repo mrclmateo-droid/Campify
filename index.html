@@ -220,7 +220,7 @@ body.mode-cantante nav#tabbar .mode-musico-only{display:none;}
   position:relative; flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
 }
 #singerModeLyrics{
-  padding:24px 22px 40vh; font-family:var(--font-lyrics); font-size:24px; line-height:1.9;
+  padding:24px 22px 40vh; font-family:var(--font-lyrics); font-size:24px; line-height:3.2;
   color:var(--text); white-space:pre-wrap;
 }
 #singerModeCanvas{
@@ -233,12 +233,13 @@ body.mode-cantante nav#tabbar .mode-musico-only{display:none;}
    freehand pixels. */
 #singerModeSymbolsLayer{position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:2;}
 .singer-symbol{
-  position:absolute; pointer-events:auto; transform:translate(-50%,-50%);
+  position:relative; pointer-events:auto; width:100%; height:100%; z-index:1;
   color:#ffd400; text-shadow:0 1px 3px rgba(0,0,0,.6);
+  display:flex; align-items:center; justify-content:center;
 }
-.singer-symbol svg{width:1.8em; height:1.8em; stroke:#ffd400; fill:none; stroke-width:2.4; display:block; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));}
+.singer-symbol svg{width:1.05em; height:1.05em; stroke:#ffd400; fill:none; stroke-width:2.4; display:block; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));}
 .singer-symbol-glyph{
-  font-family:var(--font-mono); font-weight:800; font-size:1.5em; line-height:1;
+  font-family:var(--font-mono); font-weight:800; font-size:0.9em; line-height:1;
   display:block; white-space:nowrap;
 }
 .singer-symbol.textbox{
@@ -247,6 +248,13 @@ body.mode-cantante nav#tabbar .mode-musico-only{display:none;}
   border:none; outline:none; font-family:inherit; text-shadow:none;
 }
 .singer-symbol.textbox:focus{outline:2px solid #fff; outline-offset:1px;}
+.singer-symbol-delete{
+  position:absolute; bottom:100%; left:50%; transform:translateX(-50%); margin-bottom:4px;
+  width:22px; height:22px; border-radius:50%; pointer-events:auto;
+  background:#e35a5a; color:#fff; border:2px solid var(--bg); font-size:14px; font-weight:700;
+  line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;
+  z-index:5;
+}
 #singerModeLyrics{position:relative; z-index:1;}
 /* The quick-pick popup deploys right where you tapped, not as a generic
    sheet from the bottom — same fixed-position, follow-the-touch pattern as
@@ -2122,6 +2130,7 @@ function populateLibFilters(){
 
 function filteredSongs(){
   let list = state.songs.slice();
+  if(ui.appMode === 'cantante') list = list.filter(s=>songHasLyrics(s)); // nothing to show in a lyrics-only mode otherwise
   const q = libState.query.trim().toLowerCase();
   if(q){
     list = list.filter(s => (s.title+' '+s.artist+' '+s.lyrics).toLowerCase().includes(q));
@@ -2653,7 +2662,7 @@ function updateSingerEraserButton(){
 const SINGER_SYMBOL_TYPES = {
   breath:        { glyph:'○', label:'Respirar', guide:'Tomar aire en ese punto.', common:true },
   sustain:       { glyph:'—', label:'Sostener nota', guide:'Alargar la sílaba o nota.', common:true },
-  slur:          { glyph:'⌣', label:'Ligado', guide:'Unir las sílabas o palabras sin cortar.', common:true, svgIcon:'<svg viewBox="0 0 24 24"><path d="M4 8c4 8 12 8 16 0"/></svg>' },
+  slur:          { glyph:'⌣', label:'Ligado', guide:'Unir las sílabas o palabras sin cortar.', common:true, svgIcon:'<svg viewBox="0 0 24 24"><path d="M4 16c4-8 12-8 16 0"/></svg>' },
   pitchUp:       { glyph:'T↑', label:'Subir tono', guide:'Ir hacia una nota más aguda.', common:true },
   pitchDown:     { glyph:'T↓', label:'Bajar tono', guide:'Ir hacia una nota más grave.', common:true },
   accent:        { glyph:'!', label:'Acentuar', guide:'Dar énfasis o ataque a esa palabra o nota.', common:true },
@@ -2757,6 +2766,32 @@ function saveSingerSymbols(symbols){
   song.singerSymbols = symbols;
   saveState();
 }
+const SYMBOL_MIN_GAP_EM = 1.05; // keeps a symbol clear of the text line itself either above or below it
+function clampSymbolDy(dy){
+  if(dy > -SYMBOL_MIN_GAP_EM && dy < SYMBOL_MIN_GAP_EM){
+    return dy <= 0 ? -SYMBOL_MIN_GAP_EM : SYMBOL_MIN_GAP_EM;
+  }
+  return dy;
+}
+// A plain tap on a placed symbol (not a drag) toggles a small "×" so it can
+// be removed directly, without needing to switch into eraser mode first.
+function toggleSymbolSelected(wrap, sym, symbols){
+  const already = wrap.querySelector('.singer-symbol-delete');
+  document.querySelectorAll('.singer-symbol-delete').forEach(b=>{ if(b !== already) b.remove(); });
+  if(already){ already.remove(); return; }
+  const delBadge = document.createElement('button');
+  delBadge.type = 'button';
+  delBadge.className = 'singer-symbol-delete';
+  delBadge.textContent = '×';
+  delBadge.title = 'Eliminar';
+  delBadge.addEventListener('pointerdown', e=>e.stopPropagation());
+  delBadge.addEventListener('click', e=>{
+    e.stopPropagation();
+    const idx = symbols.indexOf(sym);
+    if(idx > -1){ symbols.splice(idx,1); saveSingerSymbols(symbols); renderSingerSymbols(); }
+  });
+  wrap.appendChild(delBadge);
+}
 function placeSymbolAt(pt, type){
   const anchorIdx = findNearestWordIdx(pt);
   const anchor = getWordTopLeft(anchorIdx);
@@ -2769,7 +2804,7 @@ function placeSymbolAt(pt, type){
     type: type,
     anchorWordIdx: anchorIdx,
     dx: (pt.x - anchor.x) / singerFontSize,
-    dy: (pt.y - anchor.y) / singerFontSize,
+    dy: -SYMBOL_MIN_GAP_EM, // starts just above the word — never on top of the text itself
     text: type === 'textbox' ? '' : undefined
   };
   symbols.push(sym);
@@ -2797,28 +2832,92 @@ function renderSingerSymbols(){
     wrap.style.left = x + 'px';
     wrap.style.top = y + 'px';
     wrap.style.fontSize = singerFontSize + 'px'; // symbol sizes are in em, so this scales them with zoom too
+    // `wrap` needs REAL dimensions (not just left/top) so the delete badge —
+    // positioned relative to wrap's own box — has something sensible to
+    // measure from; centering the actual content with a transform on wrap
+    // itself keeps that box meaningful (a zero-size wrap, with centering
+    // done on the inner symbol instead, was the earlier bug: both the
+    // symbol and the badge ended up computed from the same zero-size point
+    // and always overlapped no matter the offset).
+    wrap.style.width = '1.6em';
+    wrap.style.height = '1.6em';
+    wrap.style.transform = 'translate(-50%,-50%)';
+
+    // Shared drag-to-move + tap-to-select-then-delete, for both a glyph/SVG
+    // symbol and a text box alike. A real drag (moved past a small
+    // threshold) repositions it, re-clamped so it can't land back on top of
+    // the text; a plain tap toggles a small "×" to delete instead — a
+    // textbox's own tap-to-edit still works since typing starts from a
+    // second tap once it's already focused, not from this first one.
+    let dragging = false, dragStartX = 0, dragStartY = 0, moved = false;
+    function onPointerDown(e){
+      e.stopPropagation();
+      if(singerErasing){
+        const idx = symbols.indexOf(sym);
+        if(idx > -1){ symbols.splice(idx,1); saveSingerSymbols(symbols); renderSingerSymbols(); }
+        return;
+      }
+      dragging = true; moved = false;
+      dragStartX = e.clientX; dragStartY = e.clientY;
+      wrap.setPointerCapture && e.pointerId!=null && wrap.setPointerCapture(e.pointerId);
+    }
+    function onPointerMove(e){
+      if(!dragging) return;
+      const ddx = e.clientX - dragStartX, ddy = e.clientY - dragStartY;
+      if(!moved && Math.hypot(ddx,ddy) < 6) return; // small threshold so a plain tap doesn't register as a drag
+      moved = true;
+      e.preventDefault();
+      const newX = x + ddx, newY = y + ddy;
+      wrap.style.left = newX + 'px';
+      wrap.style.top = clampSymbolDy((newY - anchor.y)/singerFontSize) * singerFontSize + anchor.y + 'px';
+    }
+    function onPointerUp(e){
+      if(!dragging) return;
+      dragging = false;
+      if(moved){
+        const ddx = e.clientX - dragStartX, ddy = e.clientY - dragStartY;
+        sym.dx = (x + ddx - anchor.x) / singerFontSize;
+        sym.dy = clampSymbolDy((y + ddy - anchor.y) / singerFontSize);
+        saveSingerSymbols(symbols);
+        renderSingerSymbols();
+      } else if(sym.type !== 'textbox'){
+        // a plain tap on a non-textbox symbol toggles the delete badge
+        toggleSymbolSelected(wrap, sym, symbols);
+      }
+    }
+    wrap.addEventListener('pointerdown', onPointerDown);
+    wrap.addEventListener('pointermove', onPointerMove);
+    wrap.addEventListener('pointerup', onPointerUp);
+
     if(sym.type === 'textbox'){
       const box = document.createElement('div');
       box.className = 'singer-symbol textbox';
       box.contentEditable = 'true';
       box.textContent = sym.text || '';
-      box.addEventListener('pointerdown', e=>e.stopPropagation()); // typing shouldn't also trigger "place a new symbol here"
       box.addEventListener('blur', ()=>{
         sym.text = box.textContent.trim();
         saveSingerSymbols(symbols);
       });
       wrap.appendChild(box);
+      const delBadge = document.createElement('button');
+      delBadge.type = 'button';
+      delBadge.className = 'singer-symbol-delete';
+      delBadge.textContent = '×';
+      delBadge.title = 'Eliminar';
+      delBadge.addEventListener('pointerdown', e=>e.stopPropagation());
+      delBadge.addEventListener('click', e=>{
+        e.stopPropagation();
+        const idx = symbols.indexOf(sym);
+        if(idx > -1){ symbols.splice(idx,1); saveSingerSymbols(symbols); renderSingerSymbols(); }
+      });
+      wrap.appendChild(delBadge);
     } else {
       const el = document.createElement('div');
       el.className = 'singer-symbol';
+      // (el keeps normal pointer-events; drag/tap/select are handled by `wrap`,
+      // and the delete badge clears it via z-index + offset instead — an
+      // earlier attempt to pointer-events:none this also broke drag capture.)
       el.innerHTML = symbolIconHtml(sym.type);
-      el.addEventListener('pointerdown', e=>{
-        e.stopPropagation();
-        if(singerErasing){
-          const idx = symbols.indexOf(sym);
-          if(idx > -1){ symbols.splice(idx,1); saveSingerSymbols(symbols); renderSingerSymbols(); }
-        }
-      });
       wrap.appendChild(el);
     }
     layer.appendChild(wrap);
@@ -2826,7 +2925,7 @@ function renderSingerSymbols(){
 }
 document.getElementById('btnSingerSymbols').addEventListener('click', openSymbolGuide);
 document.getElementById('singerModeViewport').addEventListener('click', e=>{
-  if(e.target.closest('.singer-symbol')) return; // tapping an existing symbol is handled by its own listener
+  if(e.target.closest('[data-symbol-id]')) return; // tapping an existing symbol/textbox is handled by its own listener
   if(e.target.closest('#symbolQuickPopup')) return;
   if(!document.getElementById('symbolQuickPopup').classList.contains('hidden')){ closeSymbolQuickPopup(); return; } // tapping elsewhere just dismisses an open popup
   const canvas = document.getElementById('singerModeCanvas');
