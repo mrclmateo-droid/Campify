@@ -767,11 +767,12 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           <input type="file" id="filePdfGridImport" accept="application/pdf" multiple class="hidden">
         </div>
       </div>
-      <div class="search">
+      <div class="search" style="gap:8px;">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-        <input type="text" id="libSearch" placeholder="Buscar por título, artista o letra…">
+        <input type="text" id="libSearch" placeholder="Buscar por título, artista o letra…" style="flex:1;">
+        <button type="button" class="btn small ghost" id="btnToggleLibFilters" style="flex:none;">Filtros</button>
       </div>
-      <div class="filters">
+      <div class="filters hidden" id="libFiltersPanel">
         <select id="libSort">
           <option value="alpha">Orden: Título A–Z</option>
           <option value="artist">Orden: Artista A–Z</option>
@@ -2161,6 +2162,7 @@ function filteredSongs(){
 
 function renderLibrary(){
   populateLibFilters();
+  updateLibFiltersBadge();
   const list = filteredSongs();
   document.getElementById('libCount').textContent = state.songs.length + (state.songs.length===1 ? ' canción guardada' : ' canciones guardadas');
   const grid = document.getElementById('songGrid');
@@ -2215,6 +2217,13 @@ function renderLibrary(){
 }
 
 document.getElementById('libSearch').addEventListener('input', e=>{ libState.query = e.target.value; renderLibrary(); });
+document.getElementById('btnToggleLibFilters').addEventListener('click', ()=>{
+  document.getElementById('libFiltersPanel').classList.toggle('hidden');
+});
+function updateLibFiltersBadge(){
+  const active = !!(libState.sort!=='alpha' || libState.artist || libState.key || libState.bpm || libState.content);
+  document.getElementById('btnToggleLibFilters').classList.toggle('primary', active);
+}
 document.getElementById('libSort').addEventListener('change', e=>{ libState.sort = e.target.value; renderLibrary(); });
 document.getElementById('libFilterArtist').addEventListener('change', e=>{ libState.artist = e.target.value; renderLibrary(); });
 document.getElementById('libFilterKey').addEventListener('change', e=>{ libState.key = e.target.value; renderLibrary(); });
