@@ -2849,6 +2849,7 @@ function renderSingerSymbols(){
     wrap.style.width = '1.6em';
     wrap.style.height = '1.6em';
     wrap.style.transform = 'translate(-50%,-50%)';
+    wrap.style.touchAction = 'none'; // otherwise the browser can start its own native scroll before our drag threshold kicks in, fighting with it
 
     // Shared drag-to-move + tap-to-select-then-delete, for both a glyph/SVG
     // symbol and a text box alike. A real drag (moved past a small
@@ -2866,7 +2867,7 @@ function renderSingerSymbols(){
       }
       dragging = true; moved = false;
       dragStartX = e.clientX; dragStartY = e.clientY;
-      wrap.setPointerCapture && e.pointerId!=null && wrap.setPointerCapture(e.pointerId);
+      try{ wrap.setPointerCapture && e.pointerId!=null && wrap.setPointerCapture(e.pointerId); }catch(err){ /* harmless if the pointer isn't capturable here */ }
     }
     function onPointerMove(e){
       if(!dragging) return;
