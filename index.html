@@ -502,6 +502,38 @@ body.mode-cantante nav#tabbar .mode-musico-only{display:none;}
 
 .tl-detail-header{display:flex; align-items:center; gap:10px; margin-bottom:14px;}
 .tl-items{display:flex; flex-direction:column; gap:8px;}
+.comp-list{display:flex; flex-direction:column; gap:10px;}
+.comp-card{
+  background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius);
+  padding:14px; cursor:pointer; display:flex; flex-direction:column; gap:6px;
+}
+.comp-card:active{background:var(--bg-elev-2);}
+.comp-card-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
+.comp-card .t{font-size:15px; font-weight:650;}
+.comp-card .t.untitled{color:var(--text-dim); font-style:italic; font-weight:500;}
+.comp-status-badge{
+  flex:none; font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap;
+}
+.comp-status-idea{background:#3a3550; color:#b8a9ff;}
+.comp-status-en_proceso{background:#4a3a1f; color:#e3a548;}
+.comp-status-demo{background:#1f3a2e; color:#5ad68f;}
+.comp-card .meta-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--text-dim);}
+.comp-card .tag-chip{background:var(--bg-elev-2); border-radius:8px; padding:2px 7px;}
+.comp-card .fav-star{color:var(--accent);}
+.comp-recording-row{display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--border-soft);}
+.comp-recording-row:last-child{border-bottom:0;}
+.comp-rec-name{flex:1; min-width:0; background:none; border:0; color:var(--text); font-size:13.5px; padding:4px 0;}
+.comp-rec-duration{flex:none; font-size:12px; color:var(--text-dim); font-variant-numeric:tabular-nums;}
+#recordingBanner{
+  position:fixed; top:0; left:0; right:0; z-index:300; background:#c0392b; color:#fff;
+  padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top));
+  display:flex; align-items:center; gap:12px; font-weight:600;
+}
+#recordingBanner.hidden{display:none;}
+#recordingBanner .rec-dot{width:10px; height:10px; border-radius:50%; background:#fff; animation:recPulse 1s infinite;}
+@keyframes recPulse{0%,100%{opacity:1;} 50%{opacity:.3;}}
+#recordingBanner .rec-time{font-variant-numeric:tabular-nums; flex:1;}
+#recordingBanner button{background:#fff; color:#c0392b; border:0; border-radius:8px; padding:8px 16px; font-weight:700;}
 .tl-item{
   display:flex; align-items:center; gap:10px; background:var(--bg-elev); border:1px solid var(--border);
   border-radius:var(--radius); padding:8px 10px; touch-action:pan-y;
@@ -719,6 +751,12 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
 </style>
 </head>
 <body data-theme="dark">
+<div id="recordingBanner" class="hidden">
+  <span class="rec-dot"></span>
+  <span class="rec-time" id="recordingTime">0:00</span>
+  <button type="button" id="btnStopRecording">Detener</button>
+</div>
+
 <div id="modePickerScreen">
   <div class="mode-picker-inner">
     <div class="brand" style="display:flex; margin-bottom:24px;"><img src="icon-180.png" alt=""> CRO-Chords</div>
@@ -746,6 +784,10 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
     <button data-view="tracklists" class="tab-btn">
       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
       <span>Tracklists</span>
+    </button>
+    <button data-view="compositor" class="tab-btn mode-musico-only">
+      <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M3 3l3 3M3 6l3-3" stroke-width="1.6"/></svg>
+      <span>Compositor</span>
     </button>
     <button data-view="editor" class="tab-btn mode-musico-only">
       <svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -851,6 +893,31 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       </div>
     </section>
 
+    <!-- ============ COMPOSITOR ============ -->
+    <section id="view-compositor" class="view hidden">
+      <div id="compListView">
+        <div class="view-header">
+          <div><h1>Compositor</h1><div class="sub">Ideas sueltas y canciones en proceso</div></div>
+        </div>
+        <div class="row" style="margin-bottom:14px; gap:8px;">
+          <button class="btn" id="btnCompNewText"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Nueva idea</button>
+          <button class="btn primary" id="btnCompRecord"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg> Grabar idea</button>
+          <button class="btn" id="btnCompUpload"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 9l5-5 5 5M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg> Subir audio</button>
+        </div>
+        <div class="row" style="margin-bottom:10px; flex-wrap:wrap; gap:8px; align-items:center;">
+          <select id="compFilterStatus" style="background:var(--surface-2,#1b1d22); color:var(--text); border:1px solid var(--border,#2a2d34); border-radius:10px; padding:8px 10px; font-size:14px;">
+            <option value="">Todos los estados</option>
+            <option value="idea">Idea</option>
+            <option value="en_proceso">En proceso</option>
+            <option value="demo">Demo</option>
+          </select>
+          <button class="btn small ghost" id="btnCompTrash">Papelera</button>
+          <button class="btn small ghost" id="btnCompProgBank">Banco</button>
+        </div>
+        <div id="compList" class="comp-list"></div>
+      </div>
+    </section>
+
     <!-- ============ EDITOR ============ -->
     <section id="view-editor" class="view hidden">
       <div class="view-header">
@@ -869,6 +936,23 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <button class="btn" id="btnExportIrealEditor" title="Exportar la tabla de acordes para abrir en iReal Pro" style="display:none;">Exportar a iReal Pro</button>
         <button class="btn danger" id="btnEdDelete" style="display:none;"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg> Eliminar</button>
         <button class="btn ghost" id="btnEdCancel" style="display:none;">Cancelar edición</button>
+      </div>
+      <div id="compositorFieldsPanel" class="hidden" style="background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:16px;">
+        <div class="row" style="gap:8px; margin-bottom:10px;">
+          <select id="fCompStatus" style="flex:1;">
+            <option value="idea">Idea</option>
+            <option value="en_proceso">En proceso</option>
+            <option value="demo">Demo</option>
+          </select>
+          <button type="button" class="btn icon" id="btnCompFavorite" title="Favorito"><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.3L18.5 21 12 16.5 5.5 21l2-7.7L2 9h7z"/></svg></button>
+          <button type="button" class="btn primary" id="btnCompGraduate">Pasar al repertorio</button>
+        </div>
+        <input type="text" id="fCompTags" placeholder="Etiquetas separadas por coma (ej: triste, con capo, para banda)" style="width:100%; margin-bottom:10px;">
+        <div id="compRecordingsList"></div>
+        <div class="row" style="gap:8px; margin-top:8px;">
+          <button type="button" class="btn small" id="btnCompRecordMore"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg> Grabar otra toma</button>
+          <button type="button" class="btn small" id="btnCompUploadMore"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 9l5-5 5 5M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg> Subir audio</button>
+        </div>
       </div>
       <div class="field-row-3">
         <div class="field"><label for="fTitle">Título</label><input type="text" id="fTitle" placeholder="Nombre de la canción"></div>
@@ -901,6 +985,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           <button type="button" class="btn small danger hidden" id="btnRemoveAudio">Quitar</button>
         </div>
         <input type="file" id="fileAudioAttach" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg" class="hidden">
+        <input type="file" id="fileCompUpload" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg" class="hidden" multiple>
       </div>
       <div class="field">
         <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -1280,6 +1365,209 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
    UTILS
    ============================================================ */
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+/* ---- Compositor recording: one tap, no screens in the way ----
+   Deliberately minimal: starting IS the confirmation — no "are you sure"
+   step between tapping the mic and audio actually being captured, since
+   every extra step is a chance for the idea to slip away. No time limit;
+   the recording keeps going until the person taps Detener, a phone call
+   interrupts the mic, or the tab is closed outright. Backgrounding the
+   tab (switching apps briefly, checking a notification) does NOT stop it
+   on its own — only an actual loss of the microphone track does. */
+let recordingTimerInterval = null;
+async function startQuickRecording(targetSongId){
+  if(ui.recording){ toast('Ya hay una grabación en curso'); return; }
+  let stream;
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  }catch(e){
+    toast('No se pudo acceder al micrófono. Revisá los permisos.');
+    return;
+  }
+  const chunks = [];
+  let mimeType = 'audio/webm';
+  if(!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'audio/mp4';
+  const mediaRecorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported(mimeType) ? {mimeType} : undefined);
+  mediaRecorder.addEventListener('dataavailable', e=>{ if(e.data && e.data.size > 0) chunks.push(e.data); });
+  const startedAt = Date.now();
+  ui.recording = { mediaRecorder, chunks, startedAt, stream, targetSongId, mimeType };
+  mediaRecorder.addEventListener('stop', ()=>finishQuickRecording());
+  // A dropped/interrupted track (e.g. an incoming phone call taking over
+  // the mic on iOS) ends the recording the same as tapping Detener would —
+  // whatever was captured up to that point still gets saved, rather than
+  // losing the whole take because of the interruption.
+  stream.getAudioTracks().forEach(track=>{
+    track.addEventListener('ended', ()=>{
+      if(ui.recording && ui.recording.mediaRecorder.state !== 'inactive'){
+        ui.recording.mediaRecorder.stop();
+      }
+    });
+  });
+  mediaRecorder.start(1000); // collect a chunk every second, so an abrupt interruption still leaves usable audio
+  document.getElementById('recordingBanner').classList.remove('hidden');
+  updateRecordingTimer();
+  recordingTimerInterval = setInterval(updateRecordingTimer, 500);
+  if(navigator.vibrate) navigator.vibrate(40);
+}
+function updateRecordingTimer(){
+  if(!ui.recording) return;
+  const sec = Math.floor((Date.now() - ui.recording.startedAt) / 1000);
+  document.getElementById('recordingTime').textContent = formatDuration(sec);
+}
+function stopQuickRecording(){
+  if(!ui.recording) return;
+  if(ui.recording.mediaRecorder.state !== 'inactive') ui.recording.mediaRecorder.stop();
+}
+async function finishQuickRecording(){
+  if(!ui.recording) return;
+  const { chunks, startedAt, stream, targetSongId, mimeType } = ui.recording;
+  clearInterval(recordingTimerInterval);
+  document.getElementById('recordingBanner').classList.add('hidden');
+  stream.getTracks().forEach(t=>t.stop());
+  const durationSec = (Date.now() - startedAt) / 1000;
+  ui.recording = null;
+  if(!chunks.length || durationSec < 0.5){ toast('No se guardó nada — la grabación fue muy corta'); return; }
+  const blob = new Blob(chunks, { type: mimeType });
+  const recId = 'rec_' + uid();
+  try{
+    await saveAudioBlob(recId, blob);
+  }catch(e){
+    toast('No se pudo guardar la grabación');
+    return;
+  }
+  const recording = { id: recId, name: '', duration: durationSec, createdAt: new Date().toISOString() };
+  if(targetSongId){
+    const song = state.songs.find(s=>s.id===targetSongId);
+    if(song){
+      song.recordings = song.recordings || [];
+      song.recordings.push(recording);
+      song.updatedAt = todayISO();
+      saveState();
+      if(ui.editingSongId === targetSongId) renderCompRecordingsList(song);
+    }
+  } else {
+    // No song yet -> this recording itself becomes a brand new idea.
+    const song = {
+      id: uid(), title: '', artist:'', key:'', bpm:90, capo:0, notes:'', youtubeUrl:'',
+      lyrics:'', chordChart:{sections:[]}, transpose:0,
+      status:'idea', tags:[], favorite:false, recordings:[recording],
+      deletedAt:null, updatedAt: todayISO()
+    };
+    state.songs.push(song);
+    saveState();
+    if(ui.view === 'compositor') renderCompositorList();
+  }
+  if(navigator.vibrate) navigator.vibrate([30,60,30]);
+  toast('Idea grabada y guardada');
+}
+document.getElementById('btnStopRecording').addEventListener('click', stopQuickRecording);
+async function uploadAudioFilesAsRecordings(files, targetSongId){
+  for(const file of files){
+    const recId = 'rec_' + uid();
+    try{
+      await saveAudioBlob(recId, file);
+    }catch(e){ toast('No se pudo guardar ' + file.name); continue; }
+    const duration = await getAudioFileDuration(file).catch(()=>0);
+    const recording = { id: recId, name: file.name.replace(/\.[^.]+$/,''), duration, createdAt: new Date().toISOString() };
+    if(targetSongId){
+      const song = state.songs.find(s=>s.id===targetSongId);
+      if(song){ song.recordings = song.recordings||[]; song.recordings.push(recording); song.updatedAt = todayISO(); }
+    } else {
+      const song = {
+        id: uid(), title: file.name.replace(/\.[^.]+$/,'') , artist:'', key:'', bpm:90, capo:0, notes:'', youtubeUrl:'',
+        lyrics:'', chordChart:{sections:[]}, transpose:0,
+        status:'idea', tags:[], favorite:false, recordings:[recording],
+        deletedAt:null, updatedAt: todayISO()
+      };
+      state.songs.push(song);
+      targetSongId = null; // only the first file creates a new idea; rest attach to it
+    }
+  }
+  saveState();
+  if(ui.editingSongId){ const s = state.songs.find(x=>x.id===ui.editingSongId); if(s) renderCompRecordingsList(s); }
+  if(ui.view === 'compositor') renderCompositorList();
+  toast('Audio subido');
+}
+function getAudioFileDuration(file){
+  return new Promise((resolve, reject)=>{
+    const audio = document.createElement('audio');
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = ()=>{ resolve(audio.duration || 0); URL.revokeObjectURL(audio.src); };
+    audio.onerror = reject;
+    audio.src = URL.createObjectURL(file);
+  });
+}
+function openCompositionEditor(id){
+  loadSongIntoEditor(id);
+  switchView('editor');
+}
+function createBlankIdea(){
+  const song = {
+    id: uid(), title:'', artist:'', key:'', bpm:90, capo:0, notes:'', youtubeUrl:'',
+    lyrics:'', chordChart:{sections:[]}, transpose:0,
+    status:'idea', tags:[], favorite:false, recordings:[],
+    deletedAt:null, updatedAt: todayISO()
+  };
+  state.songs.push(song);
+  saveState();
+  openCompositionEditor(song.id);
+  // Minimal friction: jump straight into the lyrics box, not the title field.
+  requestAnimationFrame(()=>{ openLyricsEditorScreen(); });
+}
+document.getElementById('btnCompNewText').addEventListener('click', createBlankIdea);
+document.getElementById('btnCompRecord').addEventListener('click', ()=>startQuickRecording(null));
+document.getElementById('btnCompUpload').addEventListener('click', ()=>document.getElementById('fileCompUpload').click());
+document.getElementById('btnCompRecordMore').addEventListener('click', ()=>{
+  if(!ui.editingSongId){ toast('Guardá la idea primero'); return; }
+  startQuickRecording(ui.editingSongId);
+});
+document.getElementById('btnCompUploadMore').addEventListener('click', ()=>document.getElementById('fileCompUpload').click());
+document.getElementById('fileCompUpload').addEventListener('change', e=>{
+  const files = [...e.target.files];
+  if(!files.length) return;
+  uploadAudioFilesAsRecordings(files, ui.editingSongId && document.getElementById('compositorFieldsPanel').classList.contains('hidden')===false ? ui.editingSongId : null);
+  e.target.value = '';
+});
+document.getElementById('compFilterStatus').addEventListener('change', e=>{
+  ui.compFilterStatus = e.target.value;
+  renderCompositorList();
+});
+document.getElementById('fCompStatus').addEventListener('change', e=>{
+  const s = state.songs.find(x=>x.id===ui.editingSongId);
+  if(!s) return;
+  s.status = e.target.value;
+  s.updatedAt = todayISO();
+  saveState();
+});
+document.getElementById('fCompTags').addEventListener('change', e=>{
+  const s = state.songs.find(x=>x.id===ui.editingSongId);
+  if(!s) return;
+  s.tags = e.target.value.split(',').map(t=>t.trim()).filter(Boolean);
+  saveState();
+});
+document.getElementById('btnCompFavorite').addEventListener('click', ()=>{
+  const s = state.songs.find(x=>x.id===ui.editingSongId);
+  if(!s) return;
+  s.favorite = !s.favorite;
+  saveState();
+  updateCompFavoriteButton(s.favorite);
+});
+document.getElementById('btnCompGraduate').addEventListener('click', ()=>{
+  const s = state.songs.find(x=>x.id===ui.editingSongId);
+  if(!s) return;
+  confirmSheet('Pasar al repertorio', '¿Marcar esta canción como terminada? Va a aparecer en Canciones en vez de en Compositor.', ()=>{
+    s.status = 'terminada';
+    s.updatedAt = todayISO();
+    saveState();
+    closeSheet();
+    loadSongIntoEditor(s.id);
+    toast('¡Lista! Ahora está en tu repertorio');
+  }, 'Pasar al repertorio');
+});
+// Backgrounding the tab must NOT stop a recording in progress — the only
+// thing handled here is making sure nothing else in the app tries to do
+// something disruptive (like re-checking the service worker) mid-recording.
+document.addEventListener('visibilitychange', ()=>{ /* intentionally a no-op for recording — see comment above */ });
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -2023,6 +2311,7 @@ function defaultState(){
   return {
     songs: [],
     tracklists: [],
+    chordProgressionBank: [],
     settings: {
       theme:'dark', fontSize:22, showChords:true, metronome:false, wakeLock:true,
       scrollSpeed:30, lastSongId: null, lastTracklistId: null
@@ -2042,7 +2331,20 @@ function loadState(){
       parsed.settings.scrollSpeed = {slow:16, medium:30, fast:48}[parsed.settings.scrollSpeed] || 30;
     }
     parsed.tracklists = parsed.tracklists || [];
-    parsed.songs.forEach(s=>{ if(typeof s.transpose !== 'number') s.transpose = 0; if(typeof s.capo !== 'number') s.capo = 0; if(!s.chordChart || !Array.isArray(s.chordChart.sections)) s.chordChart = {sections:[]}; });
+    parsed.chordProgressionBank = parsed.chordProgressionBank || [];
+    parsed.songs.forEach(s=>{
+      if(typeof s.transpose !== 'number') s.transpose = 0;
+      if(typeof s.capo !== 'number') s.capo = 0;
+      if(!s.chordChart || !Array.isArray(s.chordChart.sections)) s.chordChart = {sections:[]};
+      // Composer-mode fields. Existing songs from before this feature are
+      // treated as already-finished — they keep showing in the regular
+      // library exactly as before, nothing silently moves out from under anyone.
+      if(!s.status) s.status = 'terminada';
+      if(!Array.isArray(s.tags)) s.tags = [];
+      if(typeof s.favorite !== 'boolean') s.favorite = false;
+      if(!Array.isArray(s.recordings)) s.recordings = [];
+      if(s.deletedAt === undefined) s.deletedAt = null;
+    });
     return parsed;
   }catch(e){
     console.error('No se pudo leer el almacenamiento local, usando datos de ejemplo.', e);
@@ -2075,7 +2377,9 @@ const ui = {
   player: { playing:false, lastTs:null, rafId:null, scrollAccum:0 },
   wakeLockSentinel: null,
   metroInterval: null,
-  lastTap: 0
+  lastTap: 0,
+  compFilterStatus: '',
+  recording: null // { mediaRecorder, chunks, startedAt, stream } while a Compositor recording is in progress
 };
 
 /* ============================================================
@@ -2184,7 +2488,7 @@ function deleteSongsWithUndo(ids){
 /* ============================================================
    VIEW SWITCHING
    ============================================================ */
-const views = ['library','tracklists','editor','present','settings'];
+const views = ['library','tracklists','compositor','editor','present','settings'];
 function switchView(v){
   if(v === 'present'){
     openPresent();
@@ -2199,6 +2503,7 @@ function switchView(v){
   document.getElementById('main').scrollTop = 0;
   if(v==='library') renderLibrary();
   if(v==='tracklists') renderTracklistsList();
+  if(v==='compositor') renderCompositorList();
   if(v==='settings') renderSettings();
 }
 
@@ -2232,8 +2537,59 @@ function populateLibFilters(){
   artistSel.value = curArtist; keySel.value = curKey;
 }
 
+const COMP_STATUS_LABELS = { idea:'Idea', en_proceso:'En proceso', demo:'Demo' };
+function filteredCompositions(){
+  let list = state.songs.filter(s => s.status !== 'terminada' && !s.deletedAt);
+  if(ui.compFilterStatus) list = list.filter(s=>s.status===ui.compFilterStatus);
+  list.sort((a,b)=> (b.updatedAt||'').localeCompare(a.updatedAt||''));
+  return list;
+}
+function renderCompositorList(){
+  const list = filteredCompositions();
+  const el = document.getElementById('compList');
+  if(!list.length){
+    el.innerHTML = `<div class="empty"><div class="empty-title">Todavía no hay ideas</div><div class="empty-sub">Tocá "Nueva idea" o "Grabar idea" para anotar lo primero que se te ocurra — sin título, sin acordes, nada hace falta todavía.</div></div>`;
+    return;
+  }
+  el.innerHTML = list.map(s=>{
+    const title = s.title && s.title !== 'Sin título' ? escapeHtml(s.title) : 'Sin título todavía';
+    const untitledClass = (!s.title || s.title === 'Sin título') ? ' untitled' : '';
+    const tagsHtml = (s.tags||[]).map(t=>`<span class="tag-chip">${escapeHtml(t)}</span>`).join('');
+    const recCount = (s.recordings||[]).length;
+    return `
+    <div class="comp-card" data-id="${s.id}">
+      <div class="comp-card-top">
+        <div class="t${untitledClass}">${title}</div>
+        <span class="comp-status-badge comp-status-${s.status}">${COMP_STATUS_LABELS[s.status]||s.status}</span>
+      </div>
+      <div class="meta-row">
+        ${s.favorite?'<span class="fav-star">★</span>':''}
+        ${recCount ? `<span>🎙️ ${recCount}</span>` : ''}
+        ${tagsHtml}
+        <span>${timeAgoLabel(s.updatedAt)}</span>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.comp-card').forEach(card=>{
+    card.addEventListener('click', ()=>openCompositionEditor(card.dataset.id));
+  });
+}
+function timeAgoLabel(dateStr){
+  if(!dateStr) return '';
+  try{
+    const d = new Date(dateStr);
+    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    if(days <= 0) return 'hoy';
+    if(days === 1) return 'ayer';
+    if(days < 30) return `hace ${days} días`;
+    return dateStr.slice(0,10);
+  }catch(e){ return dateStr; }
+}
 function filteredSongs(){
-  let list = state.songs.slice();
+  // The regular library only ever shows finished songs — ideas and
+  // in-progress compositions live in their own Compositor tab instead, and
+  // anything in the trash is hidden from both until restored.
+  let list = state.songs.filter(s => s.status === 'terminada' && !s.deletedAt);
   if(ui.appMode === 'cantante') list = list.filter(s=>songHasLyrics(s)); // nothing to show in a lyrics-only mode otherwise
   const q = libState.query.trim().toLowerCase();
   if(q){
@@ -2378,6 +2734,72 @@ function loadSongIntoEditor(id){
   updateEditorPreview();
   updateChartPreview();
   updateAudioAttachUI();
+  const panel = document.getElementById('compositorFieldsPanel');
+  const isComposition = s.status && s.status !== 'terminada';
+  panel.classList.toggle('hidden', !isComposition);
+  if(isComposition){
+    document.getElementById('fCompStatus').value = s.status;
+    document.getElementById('fCompTags').value = (s.tags||[]).join(', ');
+    updateCompFavoriteButton(s.favorite);
+    renderCompRecordingsList(s);
+  }
+}
+function updateCompFavoriteButton(isFav){
+  const btn = document.getElementById('btnCompFavorite');
+  btn.classList.toggle('primary', !!isFav);
+}
+function formatDuration(sec){
+  sec = Math.round(sec||0);
+  const m = Math.floor(sec/60), s = sec%60;
+  return m + ':' + String(s).padStart(2,'0');
+}
+function renderCompRecordingsList(s){
+  const el = document.getElementById('compRecordingsList');
+  const recs = s.recordings||[];
+  if(!recs.length){ el.innerHTML = '<div class="hint">Todavía no grabaste ni subiste ningún audio para esta idea.</div>'; return; }
+  el.innerHTML = recs.map(r=>`
+    <div class="comp-recording-row" data-rec-id="${r.id}">
+      <button type="button" class="btn icon small comp-rec-play" title="Reproducir"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+      <input type="text" class="comp-rec-name" value="${escapeHtml(r.name||'')}" placeholder="Sin nombre">
+      <span class="comp-rec-duration">${formatDuration(r.duration)}</span>
+      <button type="button" class="btn icon small ghost comp-rec-delete" title="Eliminar"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg></button>
+    </div>`).join('') + '<audio id="compRecPlayer" class="hidden"></audio>';
+  el.querySelectorAll('.comp-rec-play').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const recId = btn.closest('.comp-recording-row').dataset.recId;
+      const player = document.getElementById('compRecPlayer');
+      try{
+        const blob = await loadAudioBlob(recId);
+        if(!blob) return;
+        player.src = URL.createObjectURL(blob);
+        player.classList.remove('hidden');
+        player.play();
+      }catch(e){ toast('No se pudo reproducir esta grabación'); }
+    });
+  });
+  el.querySelectorAll('.comp-rec-name').forEach(input=>{
+    input.addEventListener('change', ()=>{
+      const recId = input.closest('.comp-recording-row').dataset.recId;
+      const song = state.songs.find(x=>x.id===ui.editingSongId);
+      if(!song) return;
+      const rec = (song.recordings||[]).find(r=>r.id===recId);
+      if(rec){ rec.name = input.value.trim(); saveState(); }
+    });
+  });
+  el.querySelectorAll('.comp-rec-delete').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const recId = btn.closest('.comp-recording-row').dataset.recId;
+      const song = state.songs.find(x=>x.id===ui.editingSongId);
+      if(!song) return;
+      confirmSheet('Eliminar grabación', '¿Eliminar esta toma? No se puede deshacer.', async ()=>{
+        song.recordings = (song.recordings||[]).filter(r=>r.id!==recId);
+        saveState();
+        try{ await deleteAudioBlob(recId); }catch(e){}
+        renderCompRecordingsList(song);
+        closeSheet();
+      }, 'Eliminar');
+    });
+  });
 }
 
 function updateAudioAttachUI(){
@@ -4236,9 +4658,83 @@ document.getElementById('btnReharmonize').addEventListener('click', ()=>{
 });
 document.getElementById('btnEdDelete').addEventListener('click', ()=>{
   if(!ui.editingSongId) return;
+  const cur = state.songs.find(x=>x.id===ui.editingSongId);
+  if(cur && cur.status !== 'terminada'){
+    const id = cur.id;
+    cur.deletedAt = new Date().toISOString();
+    saveState(); newSong(); switchView('compositor');
+    toastUndo('Idea movida a la papelera', ()=>{
+      const c = state.songs.find(x=>x.id===id);
+      if(c){ c.deletedAt = null; saveState(); renderCompositorList(); toast('Idea restaurada'); }
+    });
+    return;
+  }
   confirmSheet('Eliminar canción', '¿Seguro que quieres eliminar esta canción? También se quitará de todos los tracklists.', ()=>{
     deleteSongWithUndo(ui.editingSongId);
   });
+});
+
+
+/* ---- Compositor: trash, progression bank, autosave ---- */
+document.getElementById('btnCompTrash').addEventListener('click', openCompTrash);
+function openCompTrash(){
+  const items = state.songs.filter(x=>x.status!=='terminada' && x.deletedAt);
+  const rows = items.length ? items.map(x=>`
+    <div class="picker-row" style="gap:8px;">
+      <div style="flex:1;min-width:0;"><div style="font-weight:600;">${escapeHtml(x.title&&x.title!=='Sin título'?x.title:'Sin título todavía')}</div>
+      <div style="font-size:12px;color:var(--text-dim);">${(x.recordings||[]).length} grabación(es)</div></div>
+      <button class="btn small" data-restore="${x.id}">Restaurar</button>
+      <button class="btn small danger" data-purge="${x.id}">Borrar</button>
+    </div>`).join('') : '<div class="empty-sub" style="padding:12px 0;">La papelera está vacía.</div>';
+  openSheetHtml(`<h2>Papelera</h2>${rows}
+    <div class="sheet-actions"><button class="btn ghost" id="sheetCancel" style="flex:1;">Cerrar</button></div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.querySelectorAll('[data-restore]').forEach(b=>b.addEventListener('click', ()=>{
+    const x = state.songs.find(y=>y.id===b.dataset.restore); if(x){ x.deletedAt=null; saveState(); }
+    renderCompositorList(); openCompTrash();
+  }));
+  document.querySelectorAll('[data-purge]').forEach(b=>b.addEventListener('click', ()=>{
+    const id=b.dataset.purge; const x=state.songs.find(y=>y.id===id);
+    if(x){ (x.recordings||[]).forEach(r=>{ try{ deleteAudioBlob(r.id); }catch(e){} }); }
+    state.songs = state.songs.filter(y=>y.id!==id); saveState(); openCompTrash();
+  }));
+}
+document.getElementById('btnCompProgBank').addEventListener('click', openProgBank);
+function openProgBank(){
+  const bank = state.chordProgressionBank;
+  const rows = bank.length ? bank.map(p=>`
+    <div class="picker-row" style="gap:8px;">
+      <div style="flex:1;min-width:0;"><div style="font-weight:600;">${escapeHtml(p.name)}</div>
+      <div style="font-family:var(--font-mono);font-size:13px;color:var(--text-dim);">${escapeHtml(p.chords)}</div></div>
+      <button class="btn small danger" data-pbdel="${p.id}">✕</button>
+    </div>`).join('') : '<div class="empty-sub" style="padding:8px 0;">Guardá acá progresiones que te gusten para reusarlas.</div>';
+  openSheetHtml(`<h2>Banco de progresiones</h2>${rows}
+    <div class="field"><input type="text" id="pbName" placeholder="Nombre (ej: Verso lento)"></div>
+    <div class="field"><input type="text" id="pbChords" placeholder="Acordes (ej: Am F C G)"></div>
+    <div class="sheet-actions"><button class="btn ghost" id="sheetCancel" style="flex:1;">Cerrar</button>
+    <button class="btn primary" id="pbAdd" style="flex:1;">Guardar</button></div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.getElementById('pbAdd').addEventListener('click', ()=>{
+    const name=document.getElementById('pbName').value.trim(), chords=document.getElementById('pbChords').value.trim();
+    if(!chords){ toast('Escribí los acordes'); return; }
+    state.chordProgressionBank.push({id:uid(), name:name||'Progresión', chords}); saveState(); openProgBank();
+  });
+  document.querySelectorAll('[data-pbdel]').forEach(b=>b.addEventListener('click', ()=>{
+    state.chordProgressionBank = state.chordProgressionBank.filter(p=>p.id!==b.dataset.pbdel); saveState(); openProgBank();
+  }));
+}
+// Autosave: while typing lyrics of an idea/in-progress song, save quietly so a
+// crash or an accidental back-tap never loses a thought.
+let compAutosaveTimer = null;
+document.getElementById('fLyrics').addEventListener('input', ()=>{
+  const cur = ui.editingSongId && state.songs.find(x=>x.id===ui.editingSongId);
+  if(!cur || cur.status==='terminada') return;
+  clearTimeout(compAutosaveTimer);
+  compAutosaveTimer = setTimeout(()=>{
+    cur.lyrics = document.getElementById('fLyrics').value;
+    cur.updatedAt = todayISO();
+    saveState();
+  }, 800);
 });
 
 /* ============================================================
