@@ -784,7 +784,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
 
   <nav id="tabbar" aria-label="Navegación principal">
     <button type="button" class="brand" id="btnBrandHome" title="Elegir modo de nuevo" style="cursor:pointer; background:none; border:0; text-align:left;"><img src="icon-180.png" alt=""> CRO-Chords</button>
-    <button data-view="library" class="tab-btn mode-no-compositor">
+    <button data-view="library" class="tab-btn">
       <svg viewBox="0 0 24 24"><path d="M4 19.5V6a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v13.5M6 4v16M20 19.5H6"/></svg>
       <span>Canciones</span>
     </button>
@@ -941,6 +941,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <button class="btn" id="btnShowChords" title="Ver diagramas de los acordes de esta canción" style="display:none;"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M3 10h18"/></svg> Ver acordes</button>
         <button class="btn" id="btnExportPdfEditor" title="Exportar esta canción como PDF" style="display:none;"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg> Exportar PDF</button>
         <button class="btn" id="btnExportIrealEditor" title="Exportar la tabla de acordes para abrir en iReal Pro" style="display:none;">Exportar a iReal Pro</button>
+        <button class="btn" id="btnEdMoveToComp" style="display:none;">Mover a Compositor</button>
         <button class="btn danger" id="btnEdDelete" style="display:none;"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg> Eliminar</button>
         <button class="btn ghost" id="btnEdCancel" style="display:none;">Cancelar edición</button>
       </div>
@@ -1521,7 +1522,22 @@ function createBlankIdea(){
   // Minimal friction: jump straight into the lyrics box, not the title field.
   requestAnimationFrame(()=>{ openLyricsEditorScreen(); });
 }
-document.getElementById('btnCompNewText').addEventListener('click', createBlankIdea);
+document.getElementById('btnCompNewText').addEventListener('click', ()=>{
+  openSheetHtml(`<h2>¿Qué vas a agregar?</h2>
+    <button type="button" class="picker-row" id="newKindIdea" style="width:100%;text-align:left;"><div><div style="font-weight:650;">Idea o composición nueva</div><div style="font-size:12px;color:var(--text-dim);">Queda en Compositor como borrador</div></div></button>
+    <button type="button" class="picker-row" id="newKindSong" style="width:100%;text-align:left;"><div><div style="font-weight:650;">Canción que ya existe</div><div style="font-size:12px;color:var(--text-dim);">Va directo a Canciones (repertorio)</div></div></button>
+    <div class="sheet-actions"><button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button></div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.getElementById('newKindIdea').addEventListener('click', ()=>{ closeSheet(); createBlankIdea(); });
+  document.getElementById('newKindSong').addEventListener('click', ()=>{ closeSheet(); newSong(); switchView('editor'); });
+});
+document.getElementById('btnEdMoveToComp').addEventListener('click', ()=>{
+  const c = state.songs.find(x=>x.id===ui.editingSongId);
+  if(!c) return;
+  c.status = 'en_proceso'; c.updatedAt = todayISO();
+  saveState(); newSong(); renderLibrary(); switchView('library');
+  toast('Movida a Compositor (la ves en modo compositor)');
+});
 document.getElementById('btnCompRecord').addEventListener('click', ()=>startQuickRecording(null));
 document.getElementById('btnCompUpload').addEventListener('click', ()=>document.getElementById('fileCompUpload').click());
 document.getElementById('btnCompRecordMore').addEventListener('click', ()=>{
@@ -2546,7 +2562,7 @@ function populateLibFilters(){
 
 const COMP_STATUS_LABELS = { idea:'Idea', en_proceso:'En proceso', demo:'Demo' };
 function filteredCompositions(){
-  let list = state.songs.filter(s => s.status !== 'terminada' && !s.deletedAt);
+  let list = state.songs.filter(s => s.status && s.status !== 'terminada' && !s.deletedAt);
   if(ui.compFilterStatus) list = list.filter(s=>s.status===ui.compFilterStatus);
   list.sort((a,b)=> (b.updatedAt||'').localeCompare(a.updatedAt||''));
   return list;
@@ -2596,7 +2612,7 @@ function filteredSongs(){
   // The regular library only ever shows finished songs — ideas and
   // in-progress compositions live in their own Compositor tab instead, and
   // anything in the trash is hidden from both until restored.
-  let list = state.songs.filter(s => s.status === 'terminada' && !s.deletedAt);
+  let list = state.songs.filter(s => (s.status||'terminada') === 'terminada' && !s.deletedAt);
   if(ui.appMode === 'cantante') list = list.filter(s=>songHasLyrics(s)); // nothing to show in a lyrics-only mode otherwise
   const q = libState.query.trim().toLowerCase();
   if(q){
@@ -3798,6 +3814,7 @@ document.getElementById('btnEdMoreOptions').addEventListener('click', ()=>{
     { id:'btnShowChords', label:'Ver acordes', a:'Diagramas de los acordes de esta canción', icon:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M3 10h18"/></svg>' },
     { id:'btnExportPdfEditor', label:'Exportar PDF', icon:'<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg>' },
     { id:'btnExportIrealEditor', label:'Exportar a iReal Pro', icon:'<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>' },
+    ...((()=>{ const c = ui.editingSongId && state.songs.find(x=>x.id===ui.editingSongId); return (c && (!c.status || c.status==='terminada')) ? [{ id:'btnEdMoveToComp', label:'Mover a Compositor', a:'La saca de Canciones y la deja como borrador en modo compositor', icon:'<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>' }] : []; })()),
     { id:'btnEdCancel', label:'Cancelar edición', icon:'<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>' },
     { id:'btnEdDelete', label:'Eliminar', danger:true, icon:'<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>' }
   ];
@@ -4605,6 +4622,7 @@ document.addEventListener('visibilitychange', ()=>{
 });
 window.addEventListener('focus', checkClipboardForYoutubeLink);
 
+let justCreatedInCompositor = false;
 document.getElementById('btnEdSave').addEventListener('click', ()=>{
   const data = readEditorForm();
   if(ui.editingSongId){
@@ -4612,14 +4630,16 @@ document.getElementById('btnEdSave').addEventListener('click', ()=>{
     Object.assign(s, data, {updatedAt: todayISO()});
     toast('Canción actualizada');
   } else {
-    const s = Object.assign({id:uid(), transpose:0, updatedAt: todayISO()}, data);
+    const s = Object.assign({id:uid(), transpose:0, updatedAt: todayISO(), status:'terminada', tags:[], favorite:false, recordings:[], deletedAt:null}, data);
     state.songs.push(s);
     ui.editingSongId = s.id;
     toast('Canción guardada');
+    if(ui.appMode === 'compositor') justCreatedInCompositor = true;
   }
   saveState();
   loadSongIntoEditor(ui.editingSongId);
   renderLibrary();
+  if(justCreatedInCompositor){ justCreatedInCompositor = false; switchView('library'); toast('Canción guardada en Canciones'); }
 });
 
 document.getElementById('btnEdNew').addEventListener('click', newSong);
@@ -4667,7 +4687,7 @@ document.getElementById('btnReharmonize').addEventListener('click', ()=>{
 document.getElementById('btnEdDelete').addEventListener('click', ()=>{
   if(!ui.editingSongId) return;
   const cur = state.songs.find(x=>x.id===ui.editingSongId);
-  if(cur && cur.status !== 'terminada'){
+  if(cur && cur.status && cur.status !== 'terminada'){
     const id = cur.id;
     cur.deletedAt = new Date().toISOString();
     saveState(); newSong(); switchView('compositor');
@@ -4686,7 +4706,7 @@ document.getElementById('btnEdDelete').addEventListener('click', ()=>{
 /* ---- Compositor: trash, progression bank, autosave ---- */
 document.getElementById('btnCompTrash').addEventListener('click', openCompTrash);
 function openCompTrash(){
-  const items = state.songs.filter(x=>x.status!=='terminada' && x.deletedAt);
+  const items = state.songs.filter(x=>x.status && x.status!=='terminada' && x.deletedAt);
   const rows = items.length ? items.map(x=>`
     <div class="picker-row" style="gap:8px;">
       <div style="flex:1;min-width:0;"><div style="font-weight:600;">${escapeHtml(x.title&&x.title!=='Sin título'?x.title:'Sin título todavía')}</div>
@@ -4736,7 +4756,7 @@ function openProgBank(){
 let compAutosaveTimer = null;
 document.getElementById('fLyrics').addEventListener('input', ()=>{
   const cur = ui.editingSongId && state.songs.find(x=>x.id===ui.editingSongId);
-  if(!cur || cur.status==='terminada') return;
+  if(!cur || !cur.status || cur.status==='terminada') return;
   clearTimeout(compAutosaveTimer);
   compAutosaveTimer = setTimeout(()=>{
     cur.lyrics = document.getElementById('fLyrics').value;
