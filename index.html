@@ -309,6 +309,27 @@ body.mode-cantante nav#tabbar .mode-musico-only{display:none;}
   width:100%; height:100%; min-height:240px; font-size:16px; border:0; background:none; outline:none;
   font-family:var(--font-mono); line-height:1.7; white-space:pre; color:var(--text); resize:none;
 }
+/* Syllable counter: a read-only mirror of the lyrics, shown alongside the
+   editable textarea rather than replacing it, so the count is always
+   visible as a side reference while writing. A synalepha join renders as a
+   thin tie mark between the two vowels; tapping it tells the app "don't
+   merge this one" for that specific spot in that line. */
+#syllablePanel{
+  flex:none; max-height:40vh; overflow-y:auto; border-top:1px solid var(--border);
+  padding:12px 14px; font-family:var(--font-mono); font-size:15px; line-height:1.9;
+}
+#syllablePanel.hidden{display:none;}
+.syl-line{display:flex; align-items:baseline; gap:10px; padding:2px 0;}
+.syl-line .syl-text{flex:1; min-width:0; white-space:pre-wrap; word-break:break-word;}
+.syl-line .syl-count{
+  flex:none; font-size:12px; font-weight:700; color:var(--accent); background:var(--bg-elev-2);
+  border-radius:10px; padding:2px 8px; min-width:20px; text-align:center;
+}
+.syl-tie{
+  display:inline-block; color:var(--text-faint); cursor:pointer; padding:0 1px; user-select:none;
+}
+.syl-tie.broken{color:var(--text-faint); opacity:.35;}
+.syl-chord-line{color:var(--accent); opacity:.6;}
 
 /* ---- in-place cell editing: sticky bottom bar + sliding symbol sheet ----
    Both live inside one docked container so the sheet always stacks ABOVE
@@ -545,6 +566,8 @@ body.mode-cantante nav#tabbar .mode-musico-only{display:none;}
    SETTINGS
    ============================================================ */
 .settings-group{background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius-lg); padding:6px 4px; margin-bottom:16px;}
+.settings-section-title{font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-dim); margin:22px 4px 8px;}
+.settings-section-title:first-of-type{margin-top:4px;}
 .settings-row{display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 14px; border-bottom:1px solid var(--border-soft);}
 .settings-row:last-child{border-bottom:0;}
 .settings-row .label{font-size:14.5px; font-weight:550;}
@@ -815,13 +838,14 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
             <h1 id="tlDetailName" style="font-size:19px; font-weight:650;"></h1>
             <div class="sub" id="tlDetailCount"></div>
           </div>
-          <button class="btn icon ghost" id="btnTlRename" title="Renombrar"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
-          <button class="btn icon ghost" id="btnTlDelete" title="Eliminar lista"><svg viewBox="0 0 24 24" stroke="var(--danger)"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg></button>
+          <button class="btn icon ghost" id="btnTlMoreOptions" title="Más opciones"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+          <button class="btn icon ghost" id="btnTlRename" title="Renombrar" style="display:none;"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+          <button class="btn icon ghost" id="btnTlDelete" title="Eliminar lista" style="display:none;"><svg viewBox="0 0 24 24" stroke="var(--danger)"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg></button>
         </div>
         <div class="row" style="margin-bottom:14px;">
           <button class="btn" id="btnTlAddSongs"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Agregar canciones</button>
-          <button class="btn" id="btnTlExport" title="Exportar solo esta lista"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 9l5-5 5 5M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg> Exportar lista</button>
           <button class="btn primary" id="btnTlPlay"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8V4z"/></svg> Reproducir</button>
+          <button class="btn" id="btnTlExport" title="Exportar solo esta lista" style="display:none;"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 9l5-5 5 5M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg> Exportar lista</button>
         </div>
         <div id="tlItems" class="tl-items"></div>
       </div>
@@ -916,6 +940,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
     <section id="view-settings" class="view hidden">
       <div class="view-header"><div><h1>Ajustes</h1><div class="sub">Preferencias, respaldo y datos</div></div></div>
 
+      <h2 class="settings-section-title">Apariencia</h2>
       <div class="settings-group">
         <div class="settings-row">
           <div><div class="label">Tema</div><div class="desc">Apariencia de toda la app</div></div>
@@ -932,6 +957,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         </div>
       </div>
 
+      <h2 class="settings-section-title">Presentación</h2>
       <div class="settings-group">
         <div class="settings-row">
           <div><div class="label">Mostrar acordes</div><div class="desc">Desactívalo para usar solo como teleprompter</div></div>
@@ -947,6 +973,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         </div>
       </div>
 
+      <h2 class="settings-section-title">Actualizaciones</h2>
       <div class="settings-group">
         <div class="settings-row">
           <div>
@@ -964,6 +991,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         </div>
       </div>
 
+      <h2 class="settings-section-title">Datos y respaldo</h2>
       <div class="settings-group">
         <div class="settings-row">
           <div><div class="label">Exportar biblioteca</div><div class="desc">Descarga canciones y tracklists en JSON</div></div>
@@ -1029,24 +1057,29 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
   <div id="fontSizeIndicator" class="hidden"></div>
 
   <div class="present-bottombar" id="presentBottom">
-    <div class="sub-controls mode-musico-only">
-      <button class="btn small" id="btnTranspDown">−1 semitono</button>
-      <span class="chip" id="pKey">—</span>
-      <button class="btn small" id="btnTranspUp">+1 semitono</button>
-      <span class="spacer"></span>
-      <button class="btn small" id="btnBpmDown">BPM −</button>
-      <span class="chip accent" id="pBpm">— BPM</span>
-      <button class="btn small" id="btnBpmUp">BPM +</button>
-    </div>
-    <div class="sub-controls capo-control mode-musico-only">
-      <span class="capo-label">Capo</span>
-      <button class="btn icon capo-arrow" id="btnCapoDown" title="Bajar capo" aria-label="Bajar capo">
-        <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <span class="chip accent" id="pCapo">Sin capo</span>
-      <button class="btn icon capo-arrow" id="btnCapoUp" title="Subir capo" aria-label="Subir capo">
-        <svg viewBox="0 0 24 24"><path d="M18 15l-6-6-6 6"/></svg>
-      </button>
+    <div class="sub-controls song-settings-panel hidden mode-musico-only" id="songSettingsPanel">
+      <div class="sub-controls">
+        <button class="btn small" id="btnTranspDown">−1 semitono</button>
+        <span class="chip" id="pKey">—</span>
+        <button class="btn small" id="btnTranspUp">+1 semitono</button>
+        <span class="spacer"></span>
+        <button class="btn small" id="btnBpmDown">BPM −</button>
+        <span class="chip accent" id="pBpm">— BPM</span>
+        <button class="btn small" id="btnBpmUp">BPM +</button>
+      </div>
+      <div class="sub-controls capo-control">
+        <span class="capo-label">Capo</span>
+        <button class="btn icon capo-arrow" id="btnCapoDown" title="Bajar capo" aria-label="Bajar capo">
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <span class="chip accent" id="pCapo">Sin capo</span>
+        <button class="btn icon capo-arrow" id="btnCapoUp" title="Subir capo" aria-label="Subir capo">
+          <svg viewBox="0 0 24 24"><path d="M18 15l-6-6-6 6"/></svg>
+        </button>
+      </div>
+      <div class="sub-controls">
+        <button class="btn small" id="btnRestartScroll">Reiniciar scroll</button>
+      </div>
     </div>
     <div class="speed-stepper" id="segSpeed">
       <button type="button" class="btn icon" id="btnSpeedDown" title="Más lento">−</button>
@@ -1059,7 +1092,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <button class="btn icon" id="btnNextSong" title="Canción siguiente"><svg viewBox="0 0 24 24"><path d="M5 4l10 8-10 8V4zM19 5v14"/></svg></button>
     </div>
     <div class="sub-controls">
-      <button class="btn small" id="btnRestartScroll">Reiniciar scroll</button>
+      <button class="btn small" id="btnSongSettingsToggle">Ajustes de la canción</button>
       <button class="btn small mode-musico-only" id="btnToggleChordsPresent">Ocultar acordes</button>
       <button class="btn small mode-musico-only" id="btnShowChordsPresent">Ver acordes</button>
     </div>
@@ -1113,9 +1146,11 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <div style="font-size:15px; font-weight:650;">Letra y acordes</div>
       <div style="font-size:12px; color:var(--text-dim);" id="lyricsEditorSongTitle"></div>
     </div>
+    <button type="button" class="btn small" id="btnToggleSyllables">Sílabas</button>
   </div>
   <div class="chart-editor-body">
     <div class="chart-editor-pane" id="lyricsEditorPane" style="flex:1;"></div>
+    <div id="syllablePanel" class="hidden"></div>
   </div>
 </div>
 
@@ -1335,6 +1370,75 @@ function isChordLine(line){
   const tokens = trimmed.match(/\S+/g) || [];
   if(!tokens.length) return false;
   return tokens.every(isChordToken);
+}
+
+/* ---- Spanish syllable counter, with cross-word synalepha (elision) ----
+   Counts syllables the way they'd actually be SUNG/read aloud, not just
+   written: when one word ends in a vowel sound and the next starts in one,
+   those two touching vowels merge into a single syllable (la otra -> "la
+   otra" sings as "lao-tra", not "la-o-tra") — the opposite of a hiatus,
+   which keeps them separate. Rules used:
+   - two "strong" vowels (a/e/o) together is always a hiatus (two syllables)
+   - an accented í or ú always forces a hiatus (that's what the accent is FOR)
+   - anything else where the vowels touch is a diphthong (one syllable)
+   The same two rules apply across a word boundary for the elision check. */
+const SYL_STRONG = 'aeoáéó';
+const SYL_WEAK = 'iuü';
+const SYL_ALL_VOWELS = 'aeiouáéíóúü';
+function syllIsVowel(ch){ return SYL_ALL_VOWELS.includes(ch); }
+function syllIsStrong(ch){ return SYL_STRONG.includes(ch); }
+function syllIsAccentedWeak(ch){ return ch === 'í' || ch === 'ú'; }
+function syllWordVowelGroups(word){
+  const w = word.toLowerCase();
+  const groups = [];
+  let i = 0;
+  while(i < w.length){
+    if(!syllIsVowel(w[i])){ i++; continue; }
+    let j = i;
+    let group = [i];
+    while(j+1 < w.length && syllIsVowel(w[j+1])){
+      const a = w[j], b = w[j+1];
+      const hiatus = (syllIsStrong(a) && syllIsStrong(b)) || syllIsAccentedWeak(a) || syllIsAccentedWeak(b);
+      if(hiatus){ groups.push(group); group = [j+1]; }
+      else group.push(j+1);
+      j++;
+    }
+    groups.push(group);
+    i = j+1;
+  }
+  return groups;
+}
+function syllWordCount(word){
+  if(word.toLowerCase() === 'y') return 1; // the conjunction "y" is its own syllable (sounds like "i")
+  return syllWordVowelGroups(word).length;
+}
+function syllEndsInVowelSound(word){
+  const w = word.toLowerCase();
+  if(w === 'y') return true;
+  return syllIsVowel(w[w.length-1]);
+}
+function syllStartsInVowelSound(word){
+  const w = word.toLowerCase();
+  if(w === 'y') return true;
+  if(w[0] === 'h' && syllIsVowel(w[1])) return true; // silent h
+  return syllIsVowel(w[0]);
+}
+// brokenPairs: Set of word-junction indices (0-based, "after word i") the
+// person has manually told the app NOT to merge for this specific line.
+function syllCountLine(line, brokenPairs){
+  const words = line.trim().split(/\s+/).filter(Boolean);
+  if(!words.length) return { total: 0, words, junctions: [] };
+  let total = 0;
+  words.forEach(w => { total += syllWordCount(w); });
+  const junctions = [];
+  for(let i=0; i<words.length-1; i++){
+    const eligible = syllEndsInVowelSound(words[i]) && syllStartsInVowelSound(words[i+1]);
+    const broken = !!(brokenPairs && brokenPairs.has(i));
+    const merged = eligible && !broken;
+    if(merged) total -= 1;
+    junctions.push({ afterWordIndex:i, eligible, merged });
+  }
+  return { total, words, junctions };
 }
 
 function transposeRoot(letter, accidental, semitones, preferFlat){
@@ -1916,15 +2020,12 @@ function detectNoveltyPeaks(audioBuffer, maxDurationSec){
 
 
 function defaultState(){
-  const songs = sampleSongs();
   return {
-    songs,
-    tracklists: [
-      { id: uid(), name:'Ensayo demo', songIds: songs.map(s=>s.id), updatedAt: todayISO() }
-    ],
+    songs: [],
+    tracklists: [],
     settings: {
       theme:'dark', fontSize:22, showChords:true, metronome:false, wakeLock:true,
-      scrollSpeed:30, lastSongId: songs[0].id, lastTracklistId: null
+      scrollSpeed:30, lastSongId: null, lastTracklistId: null
     }
   };
 }
@@ -3203,6 +3304,58 @@ function closeLyricsEditorScreen(){
   document.getElementById('lyricsEditorScreen').classList.add('hidden');
   document.body.style.overflow = '';
 }
+/* ---- syllable panel: a live, read-only mirror with counts + tie marks ----
+   Overrides (which ties are manually "broken") live only for the current
+   editing session, keyed by line-index + junction-index — simplest option,
+   and reasonable for a writing aid you're actively looking at rather than
+   data that needs to survive forever attached to exact text positions. */
+let syllableBrokenTies = {}; // "lineIdx:junctionIdx" -> true
+function renderSyllablePanel(){
+  const panel = document.getElementById('syllablePanel');
+  if(panel.classList.contains('hidden')) return;
+  const text = document.getElementById('fLyrics').value;
+  const lines = text.split('\n');
+  panel.innerHTML = lines.map((line, lineIdx)=>{
+    if(!line.trim()) return `<div class="syl-line"><span class="syl-text"></span></div>`;
+    if(isChordLine(line)){
+      return `<div class="syl-line"><span class="syl-text syl-chord-line">${escapeHtml(line)}</span></div>`;
+    }
+    const brokenSet = new Set(Object.keys(syllableBrokenTies)
+      .filter(k=>k.startsWith(lineIdx+':') && syllableBrokenTies[k])
+      .map(k=>parseInt(k.split(':')[1],10)));
+    const { total, words, junctions } = syllCountLine(line, brokenSet);
+    let html = '';
+    words.forEach((w, i)=>{
+      html += escapeHtml(w);
+      if(i < words.length-1){
+        const j = junctions[i];
+        if(j.eligible){
+          const brokenKey = `${lineIdx}:${j.afterWordIndex}`;
+          const isBroken = !!syllableBrokenTies[brokenKey];
+          html += ` <span class="syl-tie${isBroken?' broken':''}" data-line="${lineIdx}" data-junction="${j.afterWordIndex}" title="${isBroken?'Tocar para unir de nuevo':'Tocar para separar (sin sinalefa acá)'}">${isBroken?'·':'‿'}</span> `;
+        } else {
+          html += ' ';
+        }
+      }
+    });
+    return `<div class="syl-line"><span class="syl-text">${html}</span><span class="syl-count">${total}</span></div>`;
+  }).join('');
+  panel.querySelectorAll('.syl-tie').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const key = `${el.dataset.line}:${el.dataset.junction}`;
+      syllableBrokenTies[key] = !syllableBrokenTies[key];
+      renderSyllablePanel();
+    });
+  });
+}
+document.getElementById('btnToggleSyllables').addEventListener('click', ()=>{
+  const panel = document.getElementById('syllablePanel');
+  panel.classList.toggle('hidden');
+  if(!panel.classList.contains('hidden')) renderSyllablePanel();
+});
+document.getElementById('fLyrics').addEventListener('input', ()=>{
+  if(!document.getElementById('syllablePanel').classList.contains('hidden')) renderSyllablePanel();
+});
 document.getElementById('btnOpenLyricsEditor').addEventListener('click', openLyricsEditorScreen);
 document.getElementById('btnOpenLyricsEditorTop').addEventListener('click', openLyricsEditorScreen);
 // The less-frequent editor actions live in their original hidden buttons
@@ -4187,12 +4340,19 @@ function renderTracklistDetail(){
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
       </div>
       <div class="idx">${i+1}</div>
-      <div class="info"><div class="t">${escapeHtml(s.title)}</div><div class="a">${escapeHtml(s.artist||'')}</div></div>
+      <div class="info tl-item-open" data-open-id="${sid}" style="cursor:pointer;"><div class="t">${escapeHtml(s.title)}</div><div class="a">${escapeHtml(s.artist||'')}</div></div>
       <button class="btn icon ghost btn-remove-item" data-id="${sid}" title="Quitar">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="1.7"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>`;
   }).join('');
+  wrap.querySelectorAll('.tl-item-open').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      state.settings.lastTracklistId = tl.id;
+      saveState();
+      openPresent(el.dataset.openId, tl.id);
+    });
+  });
   wrap.querySelectorAll('.btn-remove-item').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       tl.songIds = tl.songIds.filter(id=>id!==btn.dataset.id);
@@ -4205,6 +4365,31 @@ function renderTracklistDetail(){
 }
 
 document.getElementById('btnTlBack').addEventListener('click', renderTracklistsList);
+document.getElementById('btnTlMoreOptions').addEventListener('click', ()=>{
+  const items = [
+    { id:'btnTlRename', label:'Renombrar', icon:'<svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>' },
+    { id:'btnTlExport', label:'Exportar lista', a:'Exportar solo esta lista', icon:'<svg viewBox="0 0 24 24"><path d="M12 3v12M7 9l5-5 5 5M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>' },
+    { id:'btnTlDelete', label:'Eliminar lista', danger:true, icon:'<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>' }
+  ];
+  const rows = items.map(it=>`
+    <div class="picker-row" data-trigger-id="${it.id}" style="cursor:pointer; gap:12px; ${it.danger?'color:var(--danger, #e35a5a);':''}">
+      <span style="width:24px; height:24px; display:flex; align-items:center; justify-content:center; flex:none;">${it.icon}</span>
+      <div class="info"><div class="t">${it.label}</div>${it.a ? `<div class="a">${it.a}</div>` : ''}</div>
+    </div>`).join('');
+  openSheetHtml(`
+    <h2>Más opciones</h2>
+    <div class="picker-list">${rows}</div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cerrar</button>
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.querySelectorAll('[data-trigger-id]').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      closeSheet();
+      document.getElementById(row.dataset.triggerId).click();
+    });
+  });
+});
 document.getElementById('btnTlRename').addEventListener('click', ()=>{
   const tl = state.tracklists.find(t=>t.id===ui.activeTracklistId);
   if(!tl) return;
@@ -5453,6 +5638,9 @@ function flashTransition(delta){
     lyricsContent.style.transform = 'translateX(0)';
   });
 }
+document.getElementById('btnSongSettingsToggle').addEventListener('click', ()=>{
+  document.getElementById('songSettingsPanel').classList.toggle('hidden');
+});
 document.getElementById('btnPrevSong').addEventListener('click', ()=>goSong(-1));
 document.getElementById('btnNextSong').addEventListener('click', ()=>goSong(1));
 
