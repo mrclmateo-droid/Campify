@@ -127,6 +127,9 @@ nav#tabbar button.active svg{stroke:var(--accent);}
 nav#tabbar .brand{display:none;}
 body.mode-cantante .mode-musico-only{display:none;}
 body.mode-cantante nav#tabbar .mode-musico-only{display:none;}
+nav#tabbar .mode-compositor-only{display:none;}
+body.mode-compositor nav#tabbar .mode-compositor-only{display:flex;}
+body.mode-compositor nav#tabbar .mode-no-compositor{display:none;}
 .mobile-header{display:flex; align-items:center; gap:12px; padding:16px 16px 6px; font-weight:650; font-size:19px; color:var(--text);}
 .mobile-header img{width:56px; height:56px; border-radius:13px; object-fit:cover; flex:none;}
 
@@ -770,6 +773,10 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M3 10h18"/></svg>
       <div><div class="t">Modo músico</div><div class="a">Todo: acordes, editor, exportar</div></div>
     </button>
+    <button type="button" class="mode-picker-btn" id="btnPickModeCompositor">
+      <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      <div><div class="t">Modo compositor</div><div class="a">Ideas, grabaciones y borradores</div></div>
+    </button>
   </div>
 </div>
 
@@ -777,23 +784,23 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
 
   <nav id="tabbar" aria-label="Navegación principal">
     <button type="button" class="brand" id="btnBrandHome" title="Elegir modo de nuevo" style="cursor:pointer; background:none; border:0; text-align:left;"><img src="icon-180.png" alt=""> CRO-Chords</button>
-    <button data-view="library" class="tab-btn">
+    <button data-view="library" class="tab-btn mode-no-compositor">
       <svg viewBox="0 0 24 24"><path d="M4 19.5V6a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v13.5M6 4v16M20 19.5H6"/></svg>
       <span>Canciones</span>
     </button>
-    <button data-view="tracklists" class="tab-btn">
+    <button data-view="tracklists" class="tab-btn mode-no-compositor">
       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
       <span>Tracklists</span>
     </button>
-    <button data-view="compositor" class="tab-btn mode-musico-only">
+    <button data-view="compositor" class="tab-btn mode-compositor-only">
       <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/><path d="M3 3l3 3M3 6l3-3" stroke-width="1.6"/></svg>
       <span>Compositor</span>
     </button>
-    <button data-view="editor" class="tab-btn mode-musico-only">
+    <button data-view="editor" class="tab-btn mode-musico-only mode-no-compositor">
       <svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       <span>Editor</span>
     </button>
-    <button data-view="present" class="tab-btn">
+    <button data-view="present" class="tab-btn mode-no-compositor">
       <svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8V4z"/></svg>
       <span>Presentación</span>
     </button>
@@ -1560,8 +1567,8 @@ document.getElementById('btnCompGraduate').addEventListener('click', ()=>{
     s.updatedAt = todayISO();
     saveState();
     closeSheet();
-    loadSongIntoEditor(s.id);
-    toast('¡Lista! Ahora está en tu repertorio');
+    if(ui.appMode === 'compositor'){ newSong(); switchView('compositor'); toast('¡Lista! Pasó al repertorio (la ves en modo músico o cantante)'); }
+    else { loadSongIntoEditor(s.id); toast('¡Lista! Ahora está en tu repertorio'); }
   }, 'Pasar al repertorio');
 });
 // Backgrounding the tab must NOT stop a recording in progress — the only
@@ -2697,6 +2704,7 @@ let editorChart = { sections: [] };
 
 function newSong(){
   ui.editingSongId = null;
+  document.getElementById('compositorFieldsPanel').classList.add('hidden');
   document.getElementById('editorTitle').textContent = 'Nueva canción';
   document.getElementById('editorSub').textContent = 'Completa los datos y guarda';
   document.getElementById('fTitle').value = '';
@@ -7211,11 +7219,14 @@ function init(){
 function chooseAppMode(mode){
   ui.appMode = mode;
   document.body.classList.toggle('mode-cantante', mode === 'cantante');
+  document.body.classList.toggle('mode-compositor', mode === 'compositor');
   document.getElementById('modePickerScreen').classList.add('hidden');
   init();
+  if(mode === 'compositor') switchView('compositor');
 }
 document.getElementById('btnPickModeCantante').addEventListener('click', ()=>chooseAppMode('cantante'));
 document.getElementById('btnPickModeMusico').addEventListener('click', ()=>chooseAppMode('musico'));
+document.getElementById('btnPickModeCompositor').addEventListener('click', ()=>chooseAppMode('compositor'));
 document.getElementById('btnBrandHome').addEventListener('click', ()=>{
   document.getElementById('modePickerScreen').classList.remove('hidden');
 });
