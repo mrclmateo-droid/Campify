@@ -672,11 +672,11 @@ body.mode-compositor nav#tabbar .mode-no-compositor{display:none;}
 .transport .btn.play svg{width:26px;height:26px;}
 .sub-controls{display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;}
 .speed-stepper{
-  align-self:center; display:flex; align-items:center; gap:10px;
-  background:var(--bg-elev-2); border-radius:999px; padding:4px 6px;
+  align-self:stretch; display:flex; align-items:center; justify-content:space-between; gap:10px;
+  background:var(--bg-elev-2); border-radius:999px; padding:5px;
 }
-.speed-stepper .btn.icon{width:30px; height:30px; font-size:17px; font-weight:700; border-radius:999px;}
-.speed-stepper span{font-size:13px; font-weight:600; color:var(--text-dim); min-width:26px; text-align:center;}
+.speed-stepper .btn.icon{width:64px; height:56px; font-size:30px; font-weight:700; border-radius:999px; line-height:1;}
+.speed-stepper span{font-size:17px; font-weight:700; color:var(--text); min-width:40px; text-align:center;}
 .speed-seg button{min-height:var(--tap); padding:9px 18px; font-size:14px; font-weight:600;}
 .metro-dot{width:10px; height:10px; border-radius:50%; background:var(--bg-elev-3); transition:background .05s, transform .05s;}
 .metro-dot.on{background:var(--accent); transform:scale(1.5);}
@@ -834,6 +834,9 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
           </button>
           <button class="btn" id="btnImportPdfGrid" title="Importar un PDF de tabla de acordes por compás numerado (ej. Chord ai)">
             <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><rect x="7" y="11" width="4" height="4"/><rect x="13" y="11" width="4" height="4"/></svg> Tabla numerada
+          </button>
+          <button class="btn" id="btnImportLink" title="Importar desde un link de Songsterr o pegando el texto">
+            <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg> Desde link
           </button>
           <input type="file" id="filePdfImport" accept="application/pdf" multiple class="hidden">
           <input type="file" id="filePdfPlaylistImport" accept="application/pdf" multiple class="hidden">
@@ -6642,7 +6645,71 @@ async function pdfFileToChordChart(file){
     });
     pages.push({ items });
   }
-  return pdfExtractChordChart(pages);
+  const parsedPdf = pdfExtractChordChart(pages);
+  // La Cuerda-style header: first rows are "artist", "title", "AUTOR: ...".
+  try{
+    const byTop = new Map();
+    (pages[0] ? pages[0].items : []).forEach(it=>{
+      const k = Math.round(it.top/3);
+      byTop.set(k, (byTop.get(k)||[]).concat(it));
+    });
+    const headRows = [...byTop.entries()].sort((a,b)=>a[0]-b[0]).slice(0,4)
+      .map(([,its])=>its.sort((a,b)=>a.x0-b.x0).map(i=>i.str).join(' ').trim());
+    const ai = headRows.findIndex(r=>/^AUTOR\s*:/i.test(r));
+    if(ai >= 2 && parsedPdf && !parsedPdf.title){
+      parsedPdf.title = headRows[ai-1]; parsedPdf.artist = headRows[ai-2];
+    }
+  }catch(e){}
+  return pdfCleanSongSheet(parsedPdf);
+}
+
+// Tidies "chords over lyrics" sheets such as the ones from La Cuerda: the
+// header block (artist / title / AUTOR: / site code), "*" performance notes
+// and the chord-fingering footer are not song content, so they are moved to
+// the metadata fields or dropped instead of ending up inside the lyrics.
+function pdfCleanSongSheet(parsed){
+  if(!parsed || !parsed.lyrics) return parsed;
+  let lines = parsed.lyrics.split('\n');
+  // 1) header block: [artist, title, AUTOR: x, code]
+  const autorIdx = lines.slice(0,8).findIndex(l=>/^\s*AUTOR\s*:/i.test(l));
+  if(autorIdx >= 2){
+    const head = lines.slice(0, autorIdx).map(l=>l.trim()).filter(Boolean);
+    if(head.length >= 2 && !parsed.title){ parsed.artist = parsed.artist || head[0]; parsed.title = head[head.length-1]; }
+    lines = lines.slice(autorIdx+1);
+    while(lines.length && (/^\s*$/.test(lines[0]) || /^\s*[a-z]{2,6}\d{3,6}\s*$/i.test(lines[0]))) lines.shift();
+  }
+  // 2) footer with chord fingerings (after a line of dashes)
+  const dashIdx = lines.findIndex(l=>/^\s*-{5,}\s*$/.test(l));
+  if(dashIdx >= 0) lines = lines.slice(0, dashIdx);
+  // 3) "*" notes before the first section -> notes field (+ time signature)
+  const noteLines = [];
+  while(lines.length && (/^\s*\*/.test(lines[0]) || /^\s*$/.test(lines[0]) || (noteLines.length && /^[^\n]{0,80}$/.test(lines[0]) && !/^\s*[A-ZÁÉÍÓÚÑ ]+:\s*$/.test(lines[0]) && !/^\s*[A-G][#b]?(m|maj|sus|add|dim|aug|\d|\/)?/.test(lines[0])))){
+    const t = lines.shift().trim();
+    if(t) noteLines.push(t.replace(/^\*\s*/, ''));
+  }
+  if(noteLines.length){
+    parsed.notes = noteLines.join(' ');
+    const ts = parsed.notes.match(/\b([2-9]|1[0-2])\/(2|4|8|16)\b/);
+    if(ts) parsed.timeSig = ts[0];
+  }
+  // 4) key from the first chord when the sheet does not state it
+  if(!parsed.key){
+    for(const l of lines){
+      const m = l.trim().match(/^([A-G][#b]?)(m(?!aj))?/);
+      if(m && /^[A-G][#b]?(m|maj|sus|add|dim|aug|\d|\/|-|\s|$)/.test(l.trim()) && l.trim().split(/\s+/).every(t=>/^[A-G][#b]?[^\s]*$/.test(t))){
+        parsed.key = m[1] + (m[2] ? 'm' : ''); break;
+      }
+    }
+  }
+  // 5) "Asus2-A" / "E-Esus4-E" are chord changes inside one beat: split them
+  // into separate chords with a space (same width, so columns stay aligned).
+  lines = lines.map(l=>{
+    if(!/[A-G][^\s]*-[A-G]/.test(l)) return l;
+    const spaced = l.replace(/-/g, ' ');
+    return isChordLine(spaced) ? spaced : l;
+  });
+  parsed.lyrics = lines.join('\n').replace(/^\n+/, '').replace(/\s+$/, '');
+  return parsed;
 }
 
 /* ============================================================
@@ -7097,10 +7164,10 @@ document.getElementById('filePdfGridImport').addEventListener('change', async e=
   openPdfPlaylistReview(results);
 });
 
-function openPdfReviewSheet(parsed){
+function openPdfReviewSheet(parsed, hintText){
   openSheetHtml(`
     <h2>Revisar canción importada</h2>
-    <div class="hint" style="margin:-4px 0 4px;">Reconstruido desde el PDF — revisa y corrige antes de guardar.</div>
+    <div class="hint" style="margin:-4px 0 4px;">${escapeHtml(hintText || 'Reconstruido desde el PDF — revisa y corrige antes de guardar.')}</div>
     <div class="field-row">
       <div class="field"><label>Título</label><input type="text" id="pdfTitle" value="${escapeHtml(parsed.title||'')}"></div>
       <div class="field"><label>Artista</label><input type="text" id="pdfArtist" value="${escapeHtml(parsed.artist||'')}"></div>
@@ -7126,7 +7193,7 @@ function openPdfReviewSheet(parsed){
       key: document.getElementById('pdfKey').value.trim(),
       bpm: clamp(parseInt(document.getElementById('pdfBpm').value,10) || 90, 20, 400),
       capo: 0, transpose: 0,
-      notes: 'Importado desde PDF',
+      notes: (parsed.notes ? parsed.notes + ' · ' : '') + (hintText ? 'Importado desde link' : 'Importado desde PDF'),
       lyrics: document.getElementById('pdfLyrics').value,
       updatedAt: todayISO()
     };
@@ -7139,6 +7206,115 @@ function openPdfReviewSheet(parsed){
     switchView('editor');
   });
 }
+
+
+/* ---- Import from a link (Songsterr) or pasted text ----
+   The browser cannot read another site directly (CORS), so the link goes
+   through the user's own small relay (songsterr-proxy-worker.js on Cloudflare
+   Workers), which returns { title, text }. Pasted text uses the same parser. */
+// Lines from the relay carry chords inline as ⟦Em⟧ at the spot where they sit
+// in the lyric. Turn each such line into a chord line + a lyric line, with the
+// chord starting at the same column as the lyric character it was placed on.
+function inlineChordsToLines(rawText){
+  const lines = (rawText||'').replace(/\r/g,'').split('\n');
+  const out = [];
+  let started = false;
+  lines.forEach(line=>{
+    if(!line.includes('\u27E6')){ if(started) out.push(line.replace(/\s+$/,'')); return; }
+    let lyric = '', chords = '';
+    line.split(/(\u27E6[^\u27E7]*\u27E7)/).forEach(part=>{
+      const m = part.match(/^\u27E6([^\u27E7]*)\u27E7$/);
+      if(m){
+        if(chords.length >= lyric.length) chords += (chords ? ' ' : '');
+        while(chords.length < lyric.length) chords += ' ';
+        chords += m[1];
+      } else lyric += part;
+    });
+    lyric = lyric.replace(/^\s+/,'').replace(/\s+$/,'');
+    // position shift from trimming leading whitespace
+    const lead = (line.replace(/\u27E6[^\u27E7]*\u27E7/g,'').match(/^\s*/)||[''])[0].length;
+    chords = chords.slice(Math.min(lead, chords.length - chords.trimStart().length));
+    // Lines with almost no text are the chord-diagram legend ("⟦D⟧132"), not song.
+    if(!started){
+      if(lyric.replace(/\d+/g,'').trim().length < 8) return;
+      started = true;
+    }
+    out.push(chords.replace(/\s+$/,''));
+    if(lyric) out.push(lyric);
+  });
+  return out.join('\n');
+}
+function songTextToParsed(rawText, pageTitle){
+  if((rawText||'').includes('\u27E6')) rawText = inlineChordsToLines(rawText);
+  let lines = (rawText||'').replace(/\r/g,'').split('\n').map(l=>l.replace(/\s+$/,''));
+  // fix chords chained with a dash ("Asus2-A") on chord lines, keeping widths
+  lines = lines.map(l=>{
+    if(!/[A-G][^\s]*-[A-G]/.test(l)) return l;
+    const sp = l.replace(/-/g,' ');
+    return isChordLine(sp) ? sp : l;
+  });
+  const first = lines.findIndex(l=>isChordLine(l));
+  if(first < 0) return null;
+  let last = first;
+  lines.forEach((l,i)=>{ if(isChordLine(l)) last = i; });
+  let body = lines.slice(first, Math.min(lines.length, last+2))
+    .filter(l=>l.length <= 140);
+  // keep a section label right above the first chord line ("Verso:", "[Coro]")
+  if(first>0 && /^\s*(\[[^\]]+\]|[A-Za-zÁÉÍÓÚÑáéíóúñ0-9 ]{2,25}:)\s*$/.test(lines[first-1])) body.unshift(lines[first-1]);
+  let title = '', artist = '';
+  const t = (pageTitle||'').replace(/\s*\|\s*Songsterr.*$/i,'').trim();
+  let m = t.match(/^(.*?)\s+(?:Chords|Acordes|Tabs?|Bass Tabs?)\s+(?:by|de)\s+(.+)$/i);
+  if(m){ title = m[1].trim(); artist = m[2].trim(); }
+  else if((m = t.match(/^(.+?)\s+-\s+(.+)$/))){ artist = m[1].trim(); title = m[2].trim(); }
+  else title = t;
+  const parsed = { title, artist, key:'', bpm:null, lyrics: body.join('\n').replace(/^\n+/,'').replace(/\s+$/,'') };
+  return pdfCleanSongSheet(parsed);
+}
+function openLinkImportSheet(){
+  const proxy = (state.settings.importProxyUrl||'');
+  openSheetHtml(`
+    <h2>Importar desde link</h2>
+    <div class="field"><label>Link de Songsterr</label>
+      <input type="url" id="lnkUrl" placeholder="https://www.songsterr.com/a/wsa/…" autocomplete="off"></div>
+    <div class="field"><label>Tu servicio intermediario <span style="color:var(--text-dim);font-weight:400;">(se configura una sola vez)</span></label>
+      <input type="url" id="lnkProxy" placeholder="https://cro-songsterr.TU-USUARIO.workers.dev" value="${escapeHtml(proxy)}" autocomplete="off"></div>
+    <div class="field"><label>…o pegá el texto de los acordes</label>
+      <textarea id="lnkText" spellcheck="false" style="min-height:90px;font-family:var(--font-mono);font-size:13px;white-space:pre;"></textarea></div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
+      <button class="btn primary" id="lnkGo" style="flex:1;">Importar</button>
+    </div>`);
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.getElementById('lnkGo').addEventListener('click', async ()=>{
+    const url = document.getElementById('lnkUrl').value.trim();
+    const proxyUrl = document.getElementById('lnkProxy').value.trim().replace(/\/+$/,'');
+    const pasted = document.getElementById('lnkText').value;
+    let parsed = null;
+    if(pasted.trim()){
+      parsed = songTextToParsed(pasted, '');
+      if(!parsed){ toast('No encontré acordes en el texto pegado'); return; }
+    } else {
+      if(!url){ toast('Pegá un link o el texto de los acordes'); return; }
+      if(!proxyUrl){ toast('Falta la dirección de tu servicio intermediario'); return; }
+      if(proxyUrl !== state.settings.importProxyUrl){ state.settings.importProxyUrl = proxyUrl; saveState(); }
+      const btn = document.getElementById('lnkGo'); btn.disabled = true; btn.textContent = 'Leyendo…';
+      try{
+        const res = await fetch(proxyUrl + '/?url=' + encodeURIComponent(url));
+        const data = await res.json();
+        if(!res.ok || data.error) throw new Error(data.error || ('Error ' + res.status));
+        parsed = songTextToParsed(data.text, data.title);
+        if(!parsed) throw new Error('La página no trae acordes que pueda leer');
+      }catch(err){
+        btn.disabled = false; btn.textContent = 'Importar';
+        toast((err && err.message ? err.message : 'No se pudo importar') + ' — probá pegando el texto');
+        return;
+      }
+    }
+    closeSheet();
+    openPdfReviewSheet(parsed, 'Reconstruido desde el link — revisá y corregí antes de guardar.');
+  });
+}
+document.getElementById('btnImportLink').addEventListener('click', openLinkImportSheet);
 
 document.getElementById('btnImportPdf').addEventListener('click', ()=>{
   if(typeof pdfjsLib === 'undefined'){
