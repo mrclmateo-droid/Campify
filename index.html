@@ -944,6 +944,7 @@ button:focus-visible, .song-card:focus-visible, .tl-card:focus-visible{outline:2
         <button class="btn" id="btnShowChords" title="Ver diagramas de los acordes de esta canción" style="display:none;"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M3 10h18"/></svg> Ver acordes</button>
         <button class="btn" id="btnExportPdfEditor" title="Exportar esta canción como PDF" style="display:none;"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg> Exportar PDF</button>
         <button class="btn" id="btnExportIrealEditor" title="Exportar la tabla de acordes para abrir en iReal Pro" style="display:none;">Exportar a iReal Pro</button>
+        <button class="btn" id="btnEdTranspose" style="display:none;">Cambiar tono</button>
         <button class="btn" id="btnEdMoveToComp" style="display:none;">Mover a Compositor</button>
         <button class="btn danger" id="btnEdDelete" style="display:none;"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m-9 0 1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg> Eliminar</button>
         <button class="btn ghost" id="btnEdCancel" style="display:none;">Cancelar edición</button>
@@ -3812,6 +3813,7 @@ document.getElementById('btnOpenLyricsEditorTop').addEventListener('click', open
 // a tidier way to trigger them, instead of a long row of buttons up top.
 document.getElementById('btnEdMoreOptions').addEventListener('click', ()=>{
   const items = [
+    { id:'btnEdTranspose', label:'Cambiar tono / simplificar', a:'Reescribe los acordes en otro tono, o los deja más simples', icon:'<svg viewBox="0 0 24 24"><path d="M4 8h13M13 4l4 4-4 4M20 16H7M11 12l-4 4 4 4"/></svg>' },
     { id:'btnEdDuplicate', label:'Duplicar', icon:'<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>' },
     { id:'btnReharmonize', label:'Reharmonizar', a:'Crea una copia con séptimas diatónicas según la tonalidad', icon:'<svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13M9 9l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>' },
     { id:'btnShowChords', label:'Ver acordes', a:'Diagramas de los acordes de esta canción', icon:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16M3 10h18"/></svg>' },
@@ -4705,6 +4707,122 @@ document.getElementById('btnEdDelete').addEventListener('click', ()=>{
   });
 });
 
+
+
+/* ---- Editor: change key and/or simplify chords (rewrites the text) ---- */
+// Reduces a chord to a simpler one. basic: triad only (Gm7add11 -> Gm);
+// medium: keeps the 7th but drops add9/11/13 extensions and inversions.
+function simplifyChordToken(tok, level){
+  if(!level) return tok;
+  const m = tok.match(CHORD_TOKEN_RE);
+  if(!m) return tok;
+  const root = m[1] + m[2];
+  const suf = m[3] || '';
+  const noAdd = suf.replace(/add\d+/g, '');
+  const isDim = /dim|°/.test(noAdd), isAug = /aug|\+/.test(noAdd);
+  const isMinor = !isDim && /^(m(?!aj)|min)/.test(noAdd);
+  const isMaj7 = /maj|M\d/.test(noAdd);
+  const has7 = /(7|9|11|13)/.test(noAdd.replace(/maj/g,''));
+  const sus = (noAdd.match(/sus[24]?/)||[''])[0];
+  let out = root + (isDim ? 'dim' : isMinor ? 'm' : '');
+  if(level === 'medium'){
+    if(isMaj7) out += 'maj7'; else if(has7) out += '7';
+    if(isAug) out += 'aug';
+    out += sus;
+  }
+  return out;
+}
+// Applies fn to every chord token of a line, keeping the later chords in the
+// same columns (a longer chord eats following spaces, a shorter one adds them).
+function remapChordLine(line, fn){
+  const parts = line.split(/(\s+)/);
+  let shift = 0; // extra width introduced so far (positive = we are ahead)
+  for(let i=0;i<parts.length;i++){
+    const part = parts[i];
+    if(!part) continue;
+    if(/^\s+$/.test(part)){
+      const outLen = Math.max(1, part.length - shift);
+      shift -= (part.length - outLen);
+      parts[i] = ' '.repeat(outLen);
+    } else if(isChordToken(part)){
+      const nu = fn(part);
+      shift += nu.length - part.length;
+      parts[i] = nu;
+    }
+  }
+  return parts.join('');
+}
+function remapLyricsChords(lyrics, fn){
+  return (lyrics||'').split('\n').map(l => isChordLine(l) ? remapChordLine(l, fn) : l).join('\n');
+}
+document.getElementById('btnEdTranspose').addEventListener('click', ()=>{
+  let semis = 0, level = '';
+  const lyr = document.getElementById('fLyrics').value;
+  const chartTxt = document.getElementById('fChartText').value;
+  const keyOld = document.getElementById('fKey').value.trim();
+  // Flat keys (F, Bb, Eb, Ab, Db and their relative minors) are written with
+  // flats (Bb, not A#), the way a musician would read them.
+  const flatsFor = (key)=>{
+    const m = (key||'').match(CHORD_TOKEN_RE); if(!m) return false;
+    const idx = NOTE_INDEX[m[1]+m[2]]; if(idx === undefined) return false;
+    const major = (/^(m(?!aj)|min)/.test(m[3]||'')) ? (idx+3)%12 : idx;
+    return [5,10,3,8,1].includes(major);
+  };
+  const FLAT = {'A#':'Bb','C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab'};
+  const toFlats = t => t.replace(/^([A-G]#)/, x=>FLAT[x]||x).replace(/\/([A-G]#)/, (_,x)=>'/'+(FLAT[x]||x));
+  const firstChord = ()=>{ const l = lyr.split('\n').find(isChordLine); return l ? l.trim().split(/\s+/)[0] : ''; };
+  const useFlats = ()=> flatsFor(keyOld ? transposeChordLine(keyOld, semis) : transposeToken(firstChord(), semis));
+  const fn = tok => { let t = transposeToken(tok, semis); if(useFlats()) t = toFlats(t); return simplifyChordToken(t, level); };
+  const keyNew = ()=>{ if(!keyOld) return ''; const k = transposeChordLine(keyOld, semis); return useFlats() ? toFlats(k) : k; };
+  const sample = ()=> (lyr.split('\n').filter(isChordLine).slice(0,2).map(l=>remapChordLine(l, fn)).join('\n')) || '(esta canción no tiene acordes sobre la letra)';
+  openSheetHtml(`
+    <h2>Cambiar tono / simplificar</h2>
+    <div class="field"><label>Subir o bajar el tono</label>
+      <div class="row" style="gap:10px;align-items:center;">
+        <button class="btn" id="trMinus" style="width:56px;height:48px;font-size:24px;">−</button>
+        <div style="flex:1;text-align:center;"><div id="trSemis" style="font-size:20px;font-weight:700;">0 semitonos</div>
+        <div id="trKey" style="font-size:13px;color:var(--text-dim);"></div></div>
+        <button class="btn" id="trPlus" style="width:56px;height:48px;font-size:24px;">+</button>
+      </div></div>
+    <div class="field"><label>Acordes</label>
+      <select id="trSimplify" style="width:100%;">
+        <option value="">Dejar como están</option>
+        <option value="medium">Simplificar un poco (sin add9/11, sin inversiones)</option>
+        <option value="basic">Simplificar al máximo (solo mayor / menor)</option>
+      </select></div>
+    <div class="field"><label>Vista previa</label>
+      <pre id="trPreview" style="font-family:var(--font-mono);font-size:13px;white-space:pre;overflow:auto;margin:0;padding:10px;border-radius:10px;background:var(--bg-elev-2);max-height:90px;"></pre></div>
+    <div class="hint">Cambia el texto de la canción. Después tocá Guardar.</div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="sheetCancel" style="flex:1;">Cancelar</button>
+      <button class="btn primary" id="trApply" style="flex:1;">Aplicar</button>
+    </div>`);
+  const refresh = ()=>{
+    document.getElementById('trSemis').textContent = (semis>0?'+':'') + semis + (Math.abs(semis)===1?' semitono':' semitonos');
+    document.getElementById('trKey').textContent = keyOld ? ('Tonalidad: ' + keyOld + ' → ' + keyNew()) : '';
+    document.getElementById('trPreview').textContent = sample();
+  };
+  refresh();
+  document.getElementById('trMinus').addEventListener('click', ()=>{ semis = Math.max(-11, semis-1); refresh(); });
+  document.getElementById('trPlus').addEventListener('click', ()=>{ semis = Math.min(11, semis+1); refresh(); });
+  document.getElementById('trSimplify').addEventListener('change', e=>{ level = e.target.value; refresh(); });
+  document.getElementById('sheetCancel').addEventListener('click', closeSheet);
+  document.getElementById('trApply').addEventListener('click', ()=>{
+    if(!semis && !level){ closeSheet(); return; }
+    document.getElementById('fLyrics').value = remapLyricsChords(lyr, fn);
+    if(chartTxt.trim()){
+      const chart = parseChartText(chartTxt);
+      (chart.sections||[]).forEach(sec => (sec.measures||[]).forEach(me=>{
+        me.text = (me.text||'').trim().split(/\s+/).map(t => isChordToken(t) ? fn(t) : t).join(' ');
+      }));
+      document.getElementById('fChartText').value = chartToText(chart);
+    }
+    if(keyOld) document.getElementById('fKey').value = keyNew();
+    document.getElementById('fLyrics').dispatchEvent(new Event('input'));
+    closeSheet();
+    toast('Acordes cambiados — tocá Guardar para conservarlos');
+  });
+});
 
 /* ---- Compositor: trash, progression bank, autosave ---- */
 document.getElementById('btnCompTrash').addEventListener('click', openCompTrash);
@@ -7302,6 +7420,9 @@ function openLinkImportSheet(){
         const res = await fetch(proxyUrl + '/?url=' + encodeURIComponent(url));
         const data = await res.json();
         if(!res.ok || data.error) throw new Error(data.error || ('Error ' + res.status));
+        if(/songsterr\.com/i.test(url) && !(data.text||'').includes('\u27E6')){
+          throw new Error('Tu Worker de Cloudflare tiene el código viejo: pegá el songsterr-proxy-worker.js nuevo y tocá Deploy');
+        }
         parsed = songTextToParsed(data.text, data.title);
         if(!parsed) throw new Error('La página no trae acordes que pueda leer');
       }catch(err){
