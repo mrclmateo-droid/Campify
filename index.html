@@ -7338,7 +7338,12 @@ function inlineChordsToLines(rawText){
   const out = [];
   let started = false;
   lines.forEach(line=>{
-    if(!line.includes('\u27E6')){ if(started) out.push(line.replace(/\s+$/,'')); return; }
+    if(!line.includes('\u27E6')){
+      // a section title ("Intro", "Verse 1", "Chorus") can start the song
+      if(!started && /^\s*(Intro|Verse|Verso|Chorus|Coro|Estribillo|Estrofa|Pre-?Chorus|Bridge|Puente|Outro|Solo)\b[^\n]{0,14}$/i.test(line)) started = true;
+      if(started) out.push(line.trim());
+      return;
+    }
     let lyric = '', chords = '';
     line.split(/(\u27E6[^\u27E7]*\u27E7)/).forEach(part=>{
       const m = part.match(/^\u27E6([^\u27E7]*)\u27E7$/);
@@ -7375,10 +7380,12 @@ function songTextToParsed(rawText, pageTitle){
   if(first < 0) return null;
   let last = first;
   lines.forEach((l,i)=>{ if(isChordLine(l)) last = i; });
-  let body = lines.slice(first, Math.min(lines.length, last+2))
-    .filter(l=>l.length <= 140);
+  // Keep everything from the first chord line to the END: the closing choruses
+  // are often repeated with no chord marks of their own and must not be cut.
+  let body = lines.slice(first).filter(l=>l.length <= 140);
+  while(body.length && !body[body.length-1].trim()) body.pop();
   // keep a section label right above the first chord line ("Verso:", "[Coro]")
-  if(first>0 && /^\s*(\[[^\]]+\]|[A-Za-zÁÉÍÓÚÑáéíóúñ0-9 ]{2,25}:)\s*$/.test(lines[first-1])) body.unshift(lines[first-1]);
+  if(first>0 && /^\s*(\[[^\]]+\]|[A-Za-zÁÉÍÓÚÑáéíóúñ0-9 ]{2,25}:|(Intro|Verse|Verso|Chorus|Coro|Estribillo|Estrofa|Pre-?Chorus|Bridge|Puente|Outro|Solo)\b[^\n]{0,14})\s*$/i.test(lines[first-1])) body.unshift(lines[first-1]);
   let title = '', artist = '';
   const t = (pageTitle||'').replace(/\s*\|\s*Songsterr.*$/i,'').trim();
   let m = t.match(/^(.*?)\s+(?:Chords|Acordes|Tabs?|Bass Tabs?)\s+(?:by|de)\s+(.+)$/i);
