@@ -5281,10 +5281,12 @@ document.getElementById('btnTlAddSongs').addEventListener('click', ()=>{
   const selected = new Set(); // tracked separately from the DOM so it survives filter changes
   const artists = [...new Set(available.map(s=>s.artist).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
 
-  function renderRows(filterArtist){
-    const list = filterArtist ? available.filter(s=>s.artist===filterArtist) : available;
+  function renderRows(filterArtist, q){
+    q = (q||'').trim().toLowerCase();
+    let list = filterArtist ? available.filter(s=>s.artist===filterArtist) : available;
+    if(q) list = list.filter(s=>((s.title||'')+' '+(s.artist||'')).toLowerCase().includes(q));
     if(!list.length){
-      return `<div class="empty">${filterArtist ? 'Ninguna canción de ese artista para agregar.' : 'Todas tus canciones ya están en esta lista.'}</div>`;
+      return `<div class="empty">${(filterArtist||q) ? 'Ninguna canción coincide con la búsqueda.' : 'Todas tus canciones ya están en esta lista.'}</div>`;
     }
     return list.map(s=>`
       <label class="picker-row">
@@ -5298,6 +5300,7 @@ document.getElementById('btnTlAddSongs').addEventListener('click', ()=>{
 
   openSheetHtml(`
     <h2>Agregar canciones</h2>
+    <input type="search" id="addSongsSearch" placeholder="Buscar por canción o artista…" autocomplete="off" style="width:100%; margin-bottom:10px; background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:9px 10px; color:var(--text);">
     ${artists.length ? `<select id="addSongsArtistFilter" style="width:100%; margin-bottom:10px; background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:9px 10px; color:var(--text);">${artistOptions}</select>` : ''}
     <div class="picker-list" id="addSongsList">${renderRows('')}</div>
     <div class="sheet-actions">
@@ -5311,11 +5314,12 @@ document.getElementById('btnTlAddSongs').addEventListener('click', ()=>{
     if(cb.checked) selected.add(cb.dataset.songId); else selected.delete(cb.dataset.songId);
   });
   const artistFilterEl = document.getElementById('addSongsArtistFilter');
-  if(artistFilterEl){
-    artistFilterEl.addEventListener('change', e=>{
-      document.getElementById('addSongsList').innerHTML = renderRows(e.target.value);
-    });
-  }
+  const searchEl = document.getElementById('addSongsSearch');
+  const refreshRows = ()=>{
+    document.getElementById('addSongsList').innerHTML = renderRows(artistFilterEl ? artistFilterEl.value : '', searchEl.value);
+  };
+  if(artistFilterEl) artistFilterEl.addEventListener('change', refreshRows);
+  searchEl.addEventListener('input', refreshRows);
   const okBtn = document.getElementById('sheetOk');
   if(okBtn) okBtn.addEventListener('click', ()=>{
     if(!selected.size){ toast('No seleccionaste ninguna canción'); return; }
