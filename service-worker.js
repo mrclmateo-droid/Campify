@@ -1,4 +1,4 @@
-const CACHE_NAME = 'crochords-cache-v18';
+const CACHE_NAME = 'crochords-cache-v20';
 const ASSETS = [
   './index.html',
   './manifest.json',
